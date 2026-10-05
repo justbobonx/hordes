@@ -14,6 +14,9 @@ html, body {
   font-family: "m5x7", ui-monospace, monospace;
   overflow: hidden;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 button, a { font-family: inherit; }
@@ -25,6 +28,10 @@ button, a { font-family: inherit; }
   height: 100%;
   image-rendering: pixelated;
   touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 #hud, #hud-bottom {

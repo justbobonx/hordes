@@ -115,6 +115,12 @@ Game.prototype.bind = function () {
   canvas.addEventListener("pointercancel", function () {
     self.clearHold();
   });
+  canvas.addEventListener("contextmenu", function (e) {
+    e.preventDefault();
+  });
+  canvas.addEventListener("selectstart", function (e) {
+    e.preventDefault();
+  });
 };
 
 Game.prototype.onStart = function (help) {
@@ -309,9 +315,9 @@ Game.prototype.dropAt = function (row, col) {
 Game.prototype.onDown = function (e) {
   if (!this.grid || this.ended) return;
   if (this.ui.menuOpen() || this.ui.endOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
+  e.preventDefault();
   const hit = this.cellAt(e);
   if (!hit) return;
-  e.preventDefault();
   this.clearHold();
   this.hold = { pointerId: e.pointerId };
   this.preview = { row: hit.row, col: hit.col };
