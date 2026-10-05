@@ -20,7 +20,7 @@ function Game() {
   this.holdTimer = 0;
   this.hold = null;
   this.preview = null;
-  this.origin = { x: 0, y: 0, cell: 32, n: 6 };
+  this.origin = { x: 0, y: 0, cell: 32, rows: 6, cols: 6 };
   this.bound = false;
 }
 
@@ -265,8 +265,8 @@ Game.prototype.showEnd = function () {
   this.pauseClock();
   const won = this.ended === "win";
   let scorched = 0;
-  for (let r = 0; r < this.grid.n; r++) {
-    for (let c = 0; c < this.grid.n; c++) {
+  for (let r = 0; r < this.grid.rows; r++) {
+    for (let c = 0; c < this.grid.cols; c++) {
       if (this.grid.at(r, c).is("scorched")) scorched++;
     }
   }
@@ -297,7 +297,7 @@ Game.prototype.dropAt = function (row, col) {
   if (!this.grid || this.ended || !this.queue.length) return;
   if (this.ui.menuOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.endOpen()) return;
   const kind = this.queue[0];
-  const cells = Grid.footprint(this.grid.n, kind, row, col);
+  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, row, col);
   if (!cells.length) return;
   if (this.grid.apply(cells)) this.lost = true;
   this.queue.shift();
@@ -353,7 +353,7 @@ Game.prototype.cellAt = function (e) {
   const o = this.origin;
   const col = Math.floor((x - o.x) / o.cell);
   const row = Math.floor((y - o.y) / o.cell);
-  if (!this.grid || row < 0 || col < 0 || row >= this.grid.n || col >= this.grid.n) return null;
+  if (!this.grid || row < 0 || col < 0 || row >= this.grid.rows || col >= this.grid.cols) return null;
   return { row: row, col: col };
 };
 
@@ -368,16 +368,19 @@ Game.prototype.layout = function () {
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
   this.ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const n = this.grid ? this.grid.n : 6;
+  const rows = this.grid ? this.grid.rows : 6;
+  const cols = this.grid ? this.grid.cols : 6;
   const availW = w - 12;
   const availH = h - pad.top - pad.bot - 12;
-  const side = Math.max(32, Math.min(availW, availH));
-  const cell = side / n;
+  const cell = Math.max(8, Math.min(availW / cols, availH / rows));
+  const boardW = cell * cols;
+  const boardH = cell * rows;
   this.origin = {
-    x: (w - side) / 2,
-    y: pad.top + (h - pad.top - pad.bot - side) / 2,
+    x: (w - boardW) / 2,
+    y: pad.top + (h - pad.top - pad.bot - boardH) / 2,
     cell: cell,
-    n: n,
+    rows: rows,
+    cols: cols,
   };
 };
 
@@ -400,18 +403,19 @@ Game.prototype.paint = function () {
 
 Game.prototype.drawBoard = function (ctx) {
   const o = this.origin;
-  const n = this.grid.n;
+  const rows = this.grid.rows;
+  const cols = this.grid.cols;
   const gap = Math.max(1, o.cell * 0.06);
   ctx.fillStyle = "#10140e";
-  ctx.fillRect(o.x - gap, o.y - gap, o.cell * n + gap * 2, o.cell * n + gap * 2);
-  for (let r = 0; r < n; r++) {
-    for (let c = 0; c < n; c++) {
+  ctx.fillRect(o.x - gap, o.y - gap, o.cell * cols + gap * 2, o.cell * rows + gap * 2);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       this.grid.at(r, c).draw(ctx, o.x + c * o.cell, o.y + r * o.cell, o.cell);
     }
   }
   if (!this.preview || !this.queue.length) return;
   const kind = this.queue[0];
-  const cells = Grid.footprint(n, kind, this.preview.row, this.preview.col);
+  const cells = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
   ctx.strokeStyle = "#f2e27a";
   ctx.lineWidth = Math.max(2, o.cell * 0.07);
   for (let i = 0; i < cells.length; i++) {
@@ -449,7 +453,8 @@ Game.prototype.persist = function () {
   if (!this.grid) return;
   const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
   Save.writeBoard({
-    n: this.grid.n,
+    rows: this.grid.rows,
+    cols: this.grid.cols,
     cells: this.grid.types(),
     initial: this.initial,
     queue: this.queue.slice(),

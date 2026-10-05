@@ -6,7 +6,9 @@ function Save() {}
 Save.readBoard = function () {
   try {
     const data = JSON.parse(localStorage.getItem(SAVE_BOARD) || "null");
-    return data && data.n && data.cells ? data : null;
+    if (!data || !data.cells) return null;
+    if ((data.rows && data.cols) || data.n) return data;
+    return null;
   } catch (err) {
     return null;
   }

@@ -130,6 +130,7 @@ Ui.prototype.paintTray = function (queue) {
       stamp.classList.add("stamp-col");
       for (let k = 0; k < 5; k++) {
         const cell = document.createElement("i");
+        if (k === 0 || k === 4) cell.style.background = "#f2e27a";
         stamp.appendChild(cell);
       }
     } else {
@@ -171,7 +172,7 @@ Ui.prototype.makeCard = function (card, index) {
 
   const size = document.createElement("div");
   size.className = "plan-size";
-  size.textContent = plan.size + "\u00d7" + plan.size;
+  size.textContent = plan.cols + "\u00d7" + plan.rows;
   btn.appendChild(size);
 
   const stamps = document.createElement("div");

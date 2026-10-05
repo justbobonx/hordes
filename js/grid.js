@@ -1,20 +1,21 @@
 /** Live board. Footprint, apply, dump / load. No generate. */
 
-function Grid(n) {
-  this.n = n;
+function Grid(rows, cols) {
+  this.rows = rows | 0;
+  this.cols = cols | 0 || this.rows;
   this.cells = [];
-  for (let r = 0; r < n; r++) {
+  for (let r = 0; r < this.rows; r++) {
     const row = [];
-    for (let c = 0; c < n; c++) row.push(new Cell("grass"));
+    for (let c = 0; c < this.cols; c++) row.push(new Cell("grass"));
     this.cells.push(row);
   }
 }
 
-Grid.footprint = function (n, kind, row, col) {
+Grid.footprint = function (rows, cols, kind, row, col) {
   const out = [];
-  if (row < 0 || col < 0 || row >= n || col >= n) return out;
+  if (row < 0 || col < 0 || row >= rows || col >= cols) return out;
   if (kind === "col") {
-    for (let r = 0; r < n; r++) out.push({ r: r, c: col });
+    for (let r = 0; r < rows; r++) out.push({ r: r, c: col });
     return out;
   }
   const rad = kind === "5" ? 2 : 1;
@@ -22,7 +23,7 @@ Grid.footprint = function (n, kind, row, col) {
     for (let dc = -rad; dc <= rad; dc++) {
       const rr = row + dr;
       const cc = col + dc;
-      if (rr < 0 || cc < 0 || rr >= n || cc >= n) continue;
+      if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
       out.push({ r: rr, c: cc });
     }
   }
@@ -30,14 +31,14 @@ Grid.footprint = function (n, kind, row, col) {
 };
 
 Grid.prototype.at = function (r, c) {
-  if (r < 0 || c < 0 || r >= this.n || c >= this.n) return null;
+  if (r < 0 || c < 0 || r >= this.rows || c >= this.cols) return null;
   return this.cells[r][c];
 };
 
 Grid.prototype.redCount = function () {
   let n = 0;
-  for (let r = 0; r < this.n; r++) {
-    for (let c = 0; c < this.n; c++) {
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
       if (this.cells[r][c].is("horde")) n++;
     }
   }
@@ -46,8 +47,8 @@ Grid.prototype.redCount = function () {
 
 Grid.prototype.ruinedCount = function () {
   let n = 0;
-  for (let r = 0; r < this.n; r++) {
-    for (let c = 0; c < this.n; c++) {
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
       if (this.cells[r][c].is("ruined")) n++;
     }
   }
@@ -70,9 +71,9 @@ Grid.prototype.apply = function (cells) {
 
 Grid.prototype.types = function () {
   const rows = [];
-  for (let r = 0; r < this.n; r++) {
+  for (let r = 0; r < this.rows; r++) {
     const row = [];
-    for (let c = 0; c < this.n; c++) row.push(this.cells[r][c].type);
+    for (let c = 0; c < this.cols; c++) row.push(this.cells[r][c].type);
     rows.push(row);
   }
   return rows;
@@ -80,8 +81,8 @@ Grid.prototype.types = function () {
 
 Grid.prototype.writeTypes = function (rows) {
   if (!rows) return;
-  for (let r = 0; r < this.n; r++) {
-    for (let c = 0; c < this.n; c++) {
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
       const name = rows[r] && rows[r][c];
       this.cells[r][c].setType(name);
     }
@@ -89,18 +90,21 @@ Grid.prototype.writeTypes = function (rows) {
 };
 
 Grid.prototype.dress = function () {
-  for (let r = 0; r < this.n; r++) {
-    for (let c = 0; c < this.n; c++) this.cells[r][c].dress();
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) this.cells[r][c].dress();
   }
 };
 
 Grid.prototype.dump = function () {
-  return { n: this.n, cells: this.types() };
+  return { rows: this.rows, cols: this.cols, cells: this.types() };
 };
 
 Grid.load = function (data) {
-  if (!data || !data.n || !data.cells) return null;
-  const grid = new Grid(data.n);
+  if (!data || !data.cells) return null;
+  const rows = data.rows || data.n;
+  const cols = data.cols || data.n;
+  if (!rows || !cols) return null;
+  const grid = new Grid(rows, cols);
   grid.writeTypes(data.cells);
   grid.dress();
   return grid;
