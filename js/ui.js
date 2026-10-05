@@ -250,7 +250,6 @@ Ui.prototype.bind = function (handlers) {
   };
   this.onPlanPick = handlers.planPick || null;
   this.onStoryContinue = handlers.storyContinue || null;
-  on(this.btnStart, "click", handlers.start);
   on(this.btnHelp, "click", handlers.help);
   on(this.btnPlanBack, "click", function (e) {
     e.stopPropagation();
@@ -262,4 +261,54 @@ Ui.prototype.bind = function (handlers) {
   on(this.btnGiveUp, "click", handlers.giveUp);
   on(this.btnEnd, "click", handlers.end);
   on(this.elMenu, "click", handlers.menuBackdrop);
+  const start = this.btnStart;
+  if (!start) return;
+  const label = start.textContent;
+  let timer = 0;
+  let armed = false;
+  let skipClick = false;
+  start.addEventListener("pointerdown", function (e) {
+    if (e.button && e.button !== 0) return;
+    armed = false;
+    skipClick = false;
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(function () {
+      timer = 0;
+      armed = true;
+      start.textContent = "Start Over";
+    }, 500);
+  });
+  start.addEventListener("pointerup", function () {
+    if (timer) window.clearTimeout(timer);
+    timer = 0;
+    if (!armed) return;
+    armed = false;
+    skipClick = true;
+    start.textContent = label;
+    if (handlers.startOver) handlers.startOver();
+  });
+  start.addEventListener("pointerleave", function () {
+    if (timer) window.clearTimeout(timer);
+    timer = 0;
+    armed = false;
+    start.textContent = label;
+  });
+  start.addEventListener("pointercancel", function () {
+    if (timer) window.clearTimeout(timer);
+    timer = 0;
+    armed = false;
+    start.textContent = label;
+  });
+  start.addEventListener("contextmenu", function (e) {
+    e.preventDefault();
+  });
+  start.addEventListener("click", function (e) {
+    if (skipClick) {
+      skipClick = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (handlers.start) handlers.start();
+  });
 };

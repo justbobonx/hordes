@@ -4,16 +4,36 @@ const StoryPages = {
   start: [
     {
       swatch: "#c4392f",
-      text: "Red is the horde\nBlue is a city\nGreen is just ground\nDrop the stamps in order\nCover the red\nMiss the blue",
+      text:
+`The hoard is coming!
+We must protect our cities!`
     },
     {
-      swatch: "#3f8f45",
-      text: "Press a cell to aim\nDrag the mark, release to drop\nSlide off the grid to cancel\nRed turns green with an X\nGround hit goes dark green\nBlue turns grey with an X\nThat wave is lost\nFinish the stamps anyway\nRESET puts the wave back",
+      swatch: "#c4392f",
+      text:
+`Red cells are the horde.
+Blue cells are cities.
+Green is just grass.
+`
     },
-  ],
+    {
+      swatch: "#e07a2f",
+      text: 
+`Rid the horde with booms!
+You only get so many.
+Listed across the top.`
+    },
+    {
+      swatch: "#e07a2f",
+      text: 
+`Tap and hold to aim a boom.
+Release to drop.
+Hit the horde!
+Miss the cities!`
+    } ],
   first_col: {
     swatch: "#c4392f",
-    text: "A column takes the whole file\nThe row you tap does not matter\nThe cell you tap is only the aim mark",
+    text: "A line takes out the whole row!",
   },
 };
 

@@ -40,3 +40,9 @@ Save.writeRun = function (data) {
     localStorage.setItem(SAVE_RUN, JSON.stringify(data));
   } catch (err) {}
 };
+
+Save.clearRun = function () {
+  try {
+    localStorage.removeItem(SAVE_RUN);
+  } catch (err) {}
+};

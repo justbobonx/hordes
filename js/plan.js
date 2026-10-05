@@ -1,4 +1,4 @@
-/** Wave spec and the one-card offer. Path comes later. */
+/** Wave spec. Copies, reads, query parse. Does not offer a card. */
 
 function Plan() {}
 
@@ -24,45 +24,25 @@ Plan.copy = function (plan) {
   if (cols > 12) cols = 12;
   let cities = plan.cities | 0;
   if (cities < 0) cities = 0;
-  return {
+  const seats = [];
+  const seatSrc = Array.isArray(plan.seats) ? plan.seats : [];
+  let seated = false;
+  for (let i = 0; i < stamps.length; i++) {
+    const seat = seatSrc[i];
+    if (seat === "inner" || seat === "edge" || seat === "clipped") {
+      seats.push(seat);
+      seated = true;
+    } else seats.push("");
+  }
+  const out = {
     wave: plan.wave | 0 || 1,
     rows: rows,
     cols: cols,
     stamps: stamps,
     cities: cities,
   };
-};
-
-Plan.forWave = function (wave) {
-  const w = wave > 0 ? wave : 1;
-  const ramp = [
-    { cols: 6, rows: 6, stamps: ["3"], cities: 2 },
-    { cols: 6, rows: 7, stamps: ["3", "3"], cities: 3 },
-    { cols: 7, rows: 7, stamps: ["5"], cities: 2 },
-    { cols: 7, rows: 8, stamps: ["3", "5"], cities: 3 },
-    { cols: 7, rows: 8, stamps: ["3", "col"], cities: 3 },
-    { cols: 8, rows: 9, stamps: ["3", "3", "5"], cities: 4 },
-    { cols: 8, rows: 10, stamps: ["5", "col"], cities: 4 },
-    { cols: 9, rows: 10, stamps: ["3", "5", "col"], cities: 5 },
-    { cols: 9, rows: 11, stamps: ["3", "3", "5"], cities: 5 },
-    { cols: 10, rows: 11, stamps: ["3", "5", "col"], cities: 5 },
-    { cols: 10, rows: 12, stamps: ["3", "3", "5", "col"], cities: 6 },
-    { cols: 11, rows: 12, stamps: ["5", "5", "col"], cities: 6 },
-    { cols: 11, rows: 13, stamps: ["3", "5", "col"], cities: 6 },
-    { cols: 12, rows: 13, stamps: ["3", "3", "5", "col"], cities: 7 },
-    { cols: 12, rows: 14, stamps: ["3", "5", "5", "col"], cities: 7 },
-  ];
-  const row = ramp[w - 1] || ramp[ramp.length - 1];
-  const stamps = row.stamps.slice();
-  if (w > ramp.length && w % 2 === 0) stamps.push("3");
-  const cities = w > ramp.length ? 7 + (((w - ramp.length) / 3) | 0) : row.cities;
-  return Plan.copy({
-    wave: w,
-    rows: row.rows,
-    cols: row.cols,
-    stamps: stamps,
-    cities: cities,
-  });
+  if (seated) out.seats = seats;
+  return out;
 };
 
 Plan.has = function (plan, kind) {
@@ -77,10 +57,6 @@ Plan.label = function (kind) {
   if (kind === "5") return "5×5";
   if (kind === "col") return "COL";
   return "3×3";
-};
-
-Plan.offer = function (wave) {
-  return [{ plan: Plan.forWave(wave), locked: false }];
 };
 
 Plan.fromQuery = function (search) {

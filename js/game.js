@@ -62,6 +62,9 @@ Game.prototype.bind = function () {
       self.chrome.enter();
       self.onStart(false);
     },
+    startOver: function () {
+      self.startOver();
+    },
     help: function () {
       self.chrome.enter();
       self.onStart(true);
@@ -123,6 +126,31 @@ Game.prototype.bind = function () {
   });
 };
 
+Game.prototype.startOver = function () {
+  Save.clearBoard();
+  Save.clearRun();
+  this.wave = 1;
+  this.cleared = 0;
+  this.seen = {};
+  this.grid = null;
+  this.initial = null;
+  this.queue = [];
+  this.plan = null;
+  this.lost = false;
+  this.ended = null;
+  this.elapsedMs = 0;
+  this.clockOn = 0;
+  this.storyQueue = [];
+  this.storyAfter = null;
+  this.clearHold();
+  this.ui.hideEnd();
+  this.ui.hideMenu();
+  this.ui.hidePlan();
+  this.ui.hideStory();
+  this.ui.showStart();
+  this.paint();
+};
+
 Game.prototype.onStart = function (help) {
   this.ui.hideStart();
   this.ui.hideMenu();
@@ -140,7 +168,7 @@ Game.prototype.onStart = function (help) {
 Game.prototype.openPlan = function () {
   const cards = this.testPlan
     ? [{ plan: this.testPlan, locked: false }]
-    : Plan.offer(this.wave);
+    : Planner.offer(this.wave);
   this.ui.paintPlans(cards);
   this.ui.showPlan();
   this.paint();

@@ -8,6 +8,7 @@ GridBuilder.build = function (plan) {
   const rows = plan.rows | 0;
   const cols = plan.cols | 0;
   const stamps = plan.stamps && plan.stamps.length ? plan.stamps.slice() : ["3"];
+  const seats = plan.seats || [];
   let grid = null;
   for (let attempt = 0; attempt < 24; attempt++) {
     grid = new Grid(rows, cols);
@@ -26,7 +27,7 @@ GridBuilder.build = function (plan) {
     const own = [];
     let ok = true;
     for (let i = 0; i < stamps.length; i++) {
-      const placed = GridBuilder.dropStamp(grid, stamps[i], i, i > 0, cover, sole, own);
+      const placed = GridBuilder.dropStamp(grid, stamps[i], i, i > 0, cover, sole, own, seats[i]);
       if (!placed) {
         ok = false;
         break;
@@ -47,17 +48,15 @@ GridBuilder.build = function (plan) {
   return grid;
 };
 
-GridBuilder.dropStamp = function (grid, kind, id, needOverlap, cover, sole, own) {
+GridBuilder.dropStamp = function (grid, kind, id, needOverlap, cover, sole, own, want) {
   const rows = grid.rows;
   const cols = grid.cols;
   const cap = Math.floor(rows * cols * GridBuilder.RED_CAP);
-  const passing = [];
-  const loose = [];
-  for (let t = 0; t < 140; t++) {
-    const row = (Math.random() * rows) | 0;
-    const col = (Math.random() * cols) | 0;
+  const pools = { inner: [], edge: [], clipped: [] };
+  const loose = { inner: [], edge: [], clipped: [] };
+  function consider(row, col, into) {
     const cells = Grid.footprint(rows, cols, kind, row, col);
-    if (!cells.length) continue;
+    if (!cells.length) return;
     let overlap = 0;
     let fresh = 0;
     const lost = [];
@@ -74,8 +73,8 @@ GridBuilder.dropStamp = function (grid, kind, id, needOverlap, cover, sole, own)
       }
     }
     const floor = cells.length < 3 ? 1 : kind === "col" ? 2 : 3;
-    if (fresh < floor) continue;
-    if (grid.redCount() + fresh > cap) continue;
+    if (fresh < floor) return;
+    if (grid.redCount() + fresh > cap) return;
     let keeps = true;
     for (let s = 0; s < id; s++) {
       const left = own[s] - (lost[s] || 0);
@@ -85,14 +84,62 @@ GridBuilder.dropStamp = function (grid, kind, id, needOverlap, cover, sole, own)
         break;
       }
     }
-    if (!keeps) continue;
+    if (!keeps) return;
+    let seat = "edge";
+    if (kind !== "col") {
+      const rad = kind === "5" ? 2 : 1;
+      const full = (rad * 2 + 1) * (rad * 2 + 1);
+      if (cells.length < full) seat = "clipped";
+      else {
+        seat = "inner";
+        for (let i = 0; i < cells.length; i++) {
+          const r = cells[i].r;
+          const c = cells[i].c;
+          if (r === 0 || c === 0 || r === rows - 1 || c === cols - 1) {
+            seat = "edge";
+            break;
+          }
+        }
+      }
+    }
     const hit = { cells: cells };
-    if (!needOverlap || overlap > 0) passing.push(hit);
-    else loose.push(hit);
+    if (!needOverlap || overlap > 0) into[seat].push(hit);
+    else loose[seat].push(hit);
   }
-  const pool = passing.length ? passing : loose;
-  if (!pool.length) return false;
-  const pick = pool[(Math.random() * pool.length) | 0];
+  for (let t = 0; t < 140; t++) {
+    consider((Math.random() * rows) | 0, (Math.random() * cols) | 0, pools);
+  }
+  if ((want === "inner" || want === "edge" || want === "clipped") && !pools[want].length) {
+    const found = { inner: [], edge: [], clipped: [] };
+    for (let row = 0; row < rows && found[want].length < 8; row++) {
+      for (let col = 0; col < cols && found[want].length < 8; col++) consider(row, col, found);
+    }
+    pools[want] = found[want];
+  }
+  const order = want === "inner" || want === "edge" || want === "clipped" ? [want, "inner", "edge", "clipped"] : ["inner", "edge", "clipped"];
+  let bag = null;
+  if (want) {
+    for (let i = 0; i < order.length; i++) {
+      if (pools[order[i]].length) {
+        bag = pools[order[i]];
+        break;
+      }
+    }
+  } else {
+    const open = [];
+    for (let i = 0; i < order.length; i++) if (pools[order[i]].length) open.push(pools[order[i]]);
+    if (open.length) bag = open[(Math.random() * open.length) | 0];
+  }
+  if (!bag) {
+    for (let i = 0; i < order.length; i++) {
+      if (loose[order[i]].length) {
+        bag = loose[order[i]];
+        break;
+      }
+    }
+  }
+  if (!bag || !bag.length) return false;
+  const pick = bag[(Math.random() * bag.length) | 0];
   own[id] = 0;
   for (let i = 0; i < pick.cells.length; i++) {
     const r = pick.cells[i].r;
