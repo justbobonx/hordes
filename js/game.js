@@ -338,7 +338,7 @@ Game.prototype.onDown = function (e) {
   if (!this.grid || this.ended) return;
   if (this.ui.menuOpen() || this.ui.endOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
   e.preventDefault();
-  const hit = this.cellAt(e);
+  const hit = this.aim(e);
   if (!hit) return;
   this.clearHold();
   this.hold = { pointerId: e.pointerId };
@@ -351,7 +351,7 @@ Game.prototype.onDown = function (e) {
 
 Game.prototype.onMove = function (e) {
   if (!this.hold || e.pointerId !== this.hold.pointerId) return;
-  const hit = this.cellAt(e);
+  const hit = this.aim(e);
   if (!hit) return;
   if (this.preview && hit.row === this.preview.row && hit.col === this.preview.col) return;
   this.preview = { row: hit.row, col: hit.col };
@@ -360,7 +360,7 @@ Game.prototype.onMove = function (e) {
 
 Game.prototype.onUp = function (e) {
   if (!this.hold || e.pointerId !== this.hold.pointerId) return;
-  const hit = this.cellAt(e);
+  const hit = this.aim(e);
   const aim = hit || this.preview;
   this.clearHold();
   if (!hit || !aim) return;
@@ -374,14 +374,31 @@ Game.prototype.clearHold = function () {
   this.preview = null;
 };
 
-Game.prototype.cellAt = function (e) {
+Game.prototype.aim = function (e) {
+  if (!this.grid || !this.queue.length) return null;
+  const shape = Grid.STAMP_DEFINITIONS[this.queue[0]];
+  if (!shape) return null;
   const rect = this.ui.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   const o = this.origin;
-  const col = Math.floor((x - o.x) / o.cell);
-  const row = Math.floor((y - o.y) / o.cell);
-  if (!this.grid || row < 0 || col < 0 || row >= this.grid.rows || col >= this.grid.cols) return null;
+  function axis(p, origin, n, size) {
+    const local = (p - origin) / o.cell;
+    if (size & 1) {
+      const i = Math.floor(local);
+      if (i < 0 || i >= n) return null;
+      return i;
+    }
+    if (n < 2) return null;
+    if (local < -0.5 || local > n + 0.5) return null;
+    let line = Math.round(local);
+    if (line < 1) line = 1;
+    if (line > n - 1) line = n - 1;
+    return line - 0.5;
+  }
+  const col = axis(x, o.x, this.grid.cols, shape.w);
+  const row = axis(y, o.y, this.grid.rows, shape.h);
+  if (row === null || col === null) return null;
   return { row: row, col: col };
 };
 
@@ -452,11 +469,11 @@ Game.prototype.drawBoard = function (ctx) {
     const inset = Math.max(2, o.cell * 0.1);
     ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
   }
-  const ax = o.x + this.preview.col * o.cell;
-  const ay = o.y + this.preview.row * o.cell;
+  const ax = o.x + (this.preview.col + 0.5) * o.cell;
+  const ay = o.y + (this.preview.row + 0.5) * o.cell;
   ctx.fillStyle = "#f2e27a";
   const m = o.cell * 0.16;
-  ctx.fillRect(ax + o.cell / 2 - m / 2, ay + o.cell / 2 - m / 2, m, m);
+  ctx.fillRect(ax - m / 2, ay - m / 2, m, m);
 };
 
 Game.prototype.pauseClock = function () {

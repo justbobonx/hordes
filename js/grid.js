@@ -11,22 +11,29 @@ function Grid(rows, cols) {
   }
 }
 
-Grid.SHAPES = {
-  "33": { w: 3, h: 3, ac: 1, ar: 1 },
-  "35": { w: 5, h: 3, ac: 2, ar: 1 },
-  "53": { w: 3, h: 5, ac: 1, ar: 2 },
-  "55": { w: 5, h: 5, ac: 2, ar: 2 },
-  "14": { w: 4, h: 1, ac: 1, ar: 0 },
-  "41": { w: 1, h: 4, ac: 0, ar: 1 },
+Grid.STAMP_DEFINITIONS = {
+  "33": { w: 3, h: 3, p: 30, minlevel: 1 },
+  "35": { w: 3, h: 5, p: 20, minlevel: 4 },
+  "53": { w: 5, h: 3, p: 20, minlevel: 4 },
+  "24": { w: 2, h: 4, p: 20, minlevel: 8 },
+  "42": { w: 4, h: 2, p: 20, minlevel: 8 },
+  "55": { w: 5, h: 5, p: 10, minlevel: 11 },
+  "15": { w: 1, h: 5, p: 10, minlevel: 14 },
+  "51": { w: 5, h: 1, p: 10, minlevel: 14 },
 };
 
 Grid.footprint = function (rows, cols, kind, row, col) {
   const out = [];
-  if (row < 0 || col < 0 || row >= rows || col >= cols) return out;
-  const shape = Grid.SHAPES[kind];
+  const shape = Grid.STAMP_DEFINITIONS[kind];
   if (!shape) return out;
-  const r0 = row - shape.ar;
-  const c0 = col - shape.ac;
+  if (shape.w & 1) {
+    if (col < 0 || col >= cols) return out;
+  } else if (col < 0.5 || col > cols - 1.5) return out;
+  if (shape.h & 1) {
+    if (row < 0 || row >= rows) return out;
+  } else if (row < 0.5 || row > rows - 1.5) return out;
+  const r0 = Math.round(row - (shape.h - 1) / 2);
+  const c0 = Math.round(col - (shape.w - 1) / 2);
   for (let dr = 0; dr < shape.h; dr++) {
     for (let dc = 0; dc < shape.w; dc++) {
       const rr = r0 + dr;

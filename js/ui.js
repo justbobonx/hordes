@@ -123,7 +123,7 @@ Ui.prototype.paintTray = function (queue) {
   for (let i = list.length - 1; i >= 0; i--) {
     const live = i === 0;
     const kind = list[i];
-    const shape = Grid.SHAPES[kind] || Grid.SHAPES["33"];
+    const shape = Grid.STAMP_DEFINITIONS[kind] || Grid.STAMP_DEFINITIONS["33"];
     const stamp = document.createElement("div");
     stamp.className = "stamp" + (live ? " live" : "");
     stamp.title = Plan.label(kind);

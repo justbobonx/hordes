@@ -11,7 +11,7 @@ Plan.copy = function (plan) {
   const stamps = [];
   const src = Array.isArray(plan.stamps) ? plan.stamps : [];
   for (let i = 0; i < src.length; i++) {
-    if (Grid.SHAPES[src[i]]) stamps.push(src[i]);
+    if (Grid.STAMP_DEFINITIONS[src[i]]) stamps.push(src[i]);
   }
   if (!stamps.length) stamps.push("33");
   let rows = plan.rows | 0;
@@ -46,7 +46,7 @@ Plan.has = function (plan, kind) {
 };
 
 Plan.label = function (kind) {
-  const shape = Grid.SHAPES[kind];
+  const shape = Grid.STAMP_DEFINITIONS[kind];
   if (!shape) return kind || "";
   return shape.w + "\u00d7" + shape.h;
 };

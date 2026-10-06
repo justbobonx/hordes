@@ -1,15 +1,6 @@
-/** One-card offer. Reads the piece chart. Does not build a board. */
+/** One-card offer. Reads the stamp chart. Does not build a board. */
 
 function Planner() {}
-
-Planner.PIECES = [
-  { id: "33", p: 30, minlevel: 1 },
-  { id: "35", p: 20, minlevel: 4 },
-  { id: "53", p: 20, minlevel: 4 },
-  { id: "55", p: 10, minlevel: 8 },
-  { id: "14", p: 10, minlevel: 12 },
-  { id: "41", p: 10, minlevel: 12 },
-];
 
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], cities: 0, open: "inner" },
@@ -18,8 +9,8 @@ Planner.INTRO = {
   4: { cols: 7, rows: 8, stamps: ["33", "35"], cities: 2, open: "inner" },
   6: { cols: 8, rows: 8, stamps: ["33", "53"], cities: 2, open: "inner" },
   8: { cols: 8, rows: 9, stamps: ["33", "55"], cities: 2, open: "inner" },
-  12: { cols: 9, rows: 10, stamps: ["33", "33", "14"], cities: 3, open: "inner" },
-  13: { cols: 9, rows: 10, stamps: ["33", "35", "41"], cities: 3, open: "inner" },
+  12: { cols: 9, rows: 10, stamps: ["33", "33", "51"], cities: 3, open: "inner" },
+  13: { cols: 9, rows: 10, stamps: ["33", "35", "15"], cities: 3, open: "inner" },
 };
 
 Planner.offer = function (wave) {
@@ -36,20 +27,21 @@ Planner.offer = function (wave) {
   if (count > 9) count = 9;
   const open = [];
   let total = 0;
-  for (let i = 0; i < Planner.PIECES.length; i++) {
-    const piece = Planner.PIECES[i];
+  const ids = Object.keys(Grid.STAMP_DEFINITIONS);
+  for (let i = 0; i < ids.length; i++) {
+    const piece = Grid.STAMP_DEFINITIONS[ids[i]];
     if (piece.minlevel > w) continue;
-    open.push(piece);
+    open.push(ids[i]);
     total += piece.p;
   }
   const stamps = [];
   for (let n = 0; n < count; n++) {
     let roll = Math.random() * total;
-    let pick = open[open.length - 1].id;
+    let pick = open[open.length - 1];
     for (let i = 0; i < open.length; i++) {
-      roll -= open[i].p;
+      roll -= Grid.STAMP_DEFINITIONS[open[i]].p;
       if (roll < 0) {
-        pick = open[i].id;
+        pick = open[i];
         break;
       }
     }

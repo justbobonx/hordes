@@ -19,9 +19,13 @@ GridBuilder.build = function (plan) {
   const built = GridBuilder.dropAll(rows, cols, stamps, plan.open === "edge" ? "edge" : "inner", true);
   const grid = built ? built.grid : new Grid(rows, cols);
   if (!built) {
-    const midR = (rows / 2) | 0;
-    const midC = (cols / 2) | 0;
-    const seed = Grid.footprint(rows, cols, stamps[0] || "33", midR, midC);
+    const kind = stamps[0] || "33";
+    const shape = Grid.STAMP_DEFINITIONS[kind];
+    let midR = (rows / 2) | 0;
+    let midC = (cols / 2) | 0;
+    if (shape && !(shape.h & 1)) midR = Math.min(rows - 1.5, Math.max(0.5, midR - 0.5));
+    if (shape && !(shape.w & 1)) midC = Math.min(cols - 1.5, Math.max(0.5, midC - 0.5));
+    const seed = Grid.footprint(rows, cols, kind, midR, midC);
     for (let i = 0; i < seed.length; i++) grid.at(seed[i].r, seed[i].c).setType("horde");
   }
   GridBuilder.paintCities(grid, cityN, built ? built.blobAt : null);
@@ -68,8 +72,20 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open
   const rows = grid.rows;
   const cols = grid.cols;
   const cap = Math.floor(rows * cols * GridBuilder.RED_CAP);
-  const shape = Grid.SHAPES[kind];
+  const shape = Grid.STAMP_DEFINITIONS[kind];
   const full = shape ? shape.w * shape.h : 0;
+  const rowAnchors = [];
+  const colAnchors = [];
+  if (shape && shape.h & 1) {
+    for (let r = 0; r < rows; r++) rowAnchors.push(r);
+  } else if (rows > 1) {
+    for (let r = 0; r < rows - 1; r++) rowAnchors.push(r + 0.5);
+  }
+  if (shape && shape.w & 1) {
+    for (let c = 0; c < cols; c++) colAnchors.push(c);
+  } else if (cols > 1) {
+    for (let c = 0; c < cols - 1; c++) colAnchors.push(c + 0.5);
+  }
   const dirs = [
     [1, 0],
     [-1, 0],
@@ -142,13 +158,14 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open
     else if (touched.length === 1 && (overlap > 0 || true)) pools.attach[seat].push(hit);
   }
 
-  for (let t = 0; t < 180; t++) consider((Math.random() * rows) | 0, (Math.random() * cols) | 0);
+  if (!rowAnchors.length || !colAnchors.length) return null;
+  for (let t = 0; t < 180; t++) consider(rowAnchors[(Math.random() * rowAnchors.length) | 0], colAnchors[(Math.random() * colAnchors.length) | 0]);
   let bag = GridBuilder.pickBag(pools, first, openSeat, wantNew, open, relax);
   if (!bag || !bag.length) {
     pools.attach = { inner: [], edge: [], clipped: [] };
     pools.free = { inner: [], edge: [], clipped: [] };
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) consider(row, col);
+    for (let ri = 0; ri < rowAnchors.length; ri++) {
+      for (let ci = 0; ci < colAnchors.length; ci++) consider(rowAnchors[ri], colAnchors[ci]);
     }
     bag = GridBuilder.pickBag(pools, first, openSeat, wantNew, open, relax);
   }
