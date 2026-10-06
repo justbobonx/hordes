@@ -123,23 +123,13 @@ Ui.prototype.paintTray = function (queue) {
   for (let i = list.length - 1; i >= 0; i--) {
     const live = i === 0;
     const kind = list[i];
+    const shape = Grid.SHAPES[kind] || Grid.SHAPES["33"];
     const stamp = document.createElement("div");
     stamp.className = "stamp" + (live ? " live" : "");
     stamp.title = Plan.label(kind);
-    if (kind === "col") {
-      stamp.classList.add("stamp-col");
-      for (let k = 0; k < 5; k++) {
-        const cell = document.createElement("i");
-        if (k === 0 || k === 4) cell.style.background = "#f2e27a";
-        stamp.appendChild(cell);
-      }
-    } else {
-      const rad = kind === "5" ? 5 : 3;
-      stamp.classList.add(kind === "5" ? "stamp-5" : "stamp-3");
-      for (let k = 0; k < rad * rad; k++) {
-        const cell = document.createElement("i");
-        stamp.appendChild(cell);
-      }
+    stamp.style.gridTemplateColumns = "repeat(" + shape.w + ", 7px)";
+    for (let k = 0; k < shape.w * shape.h; k++) {
+      stamp.appendChild(document.createElement("i"));
     }
     this.elTray.appendChild(stamp);
   }

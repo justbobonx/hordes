@@ -212,12 +212,6 @@ Game.prototype.afterStory = function (after) {
 Game.prototype.onPlan = function (card) {
   this.ui.hidePlan();
   this.plan = Plan.copy(card.plan);
-  if (!this.testPlan && Plan.has(this.plan, "col") && !this.seen.first_col) {
-    this.seen.first_col = true;
-    this.persistRun();
-    this.openStory("first_col", "play");
-    return;
-  }
   this.beginWave(this.plan);
 };
 

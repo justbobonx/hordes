@@ -11,18 +11,26 @@ function Grid(rows, cols) {
   }
 }
 
+Grid.SHAPES = {
+  "33": { w: 3, h: 3, ac: 1, ar: 1 },
+  "35": { w: 5, h: 3, ac: 2, ar: 1 },
+  "53": { w: 3, h: 5, ac: 1, ar: 2 },
+  "55": { w: 5, h: 5, ac: 2, ar: 2 },
+  "14": { w: 4, h: 1, ac: 1, ar: 0 },
+  "41": { w: 1, h: 4, ac: 0, ar: 1 },
+};
+
 Grid.footprint = function (rows, cols, kind, row, col) {
   const out = [];
   if (row < 0 || col < 0 || row >= rows || col >= cols) return out;
-  if (kind === "col") {
-    for (let r = 0; r < rows; r++) out.push({ r: r, c: col });
-    return out;
-  }
-  const rad = kind === "5" ? 2 : 1;
-  for (let dr = -rad; dr <= rad; dr++) {
-    for (let dc = -rad; dc <= rad; dc++) {
-      const rr = row + dr;
-      const cc = col + dc;
+  const shape = Grid.SHAPES[kind];
+  if (!shape) return out;
+  const r0 = row - shape.ar;
+  const c0 = col - shape.ac;
+  for (let dr = 0; dr < shape.h; dr++) {
+    for (let dc = 0; dc < shape.w; dc++) {
+      const rr = r0 + dr;
+      const cc = c0 + dc;
       if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
       out.push({ r: rr, c: cc });
     }
