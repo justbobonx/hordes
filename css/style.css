@@ -201,6 +201,8 @@ h1 {
 
 .plan-wave { font-size: 22px; color: #c9d2b8; }
 .plan-size { font-size: 48px; }
+.plan-count { font-size: 28px; }
+.plan-meta { font-size: 22px; color: #c9d2b8; letter-spacing: 1px; }
 .plan-stamps, .plan-cities { font-size: 26px; }
 .plan-stamps span {
   display: inline-block;

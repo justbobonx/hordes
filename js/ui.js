@@ -165,14 +165,19 @@ Ui.prototype.makeCard = function (card, index) {
   size.textContent = plan.cols + "\u00d7" + plan.rows;
   btn.appendChild(size);
 
-  const stamps = document.createElement("div");
-  stamps.className = "plan-stamps";
-  for (let i = 0; i < plan.stamps.length; i++) {
-    const bit = document.createElement("span");
-    bit.textContent = Plan.label(plan.stamps[i]);
-    stamps.appendChild(bit);
-  }
-  btn.appendChild(stamps);
+  const count = document.createElement("div");
+  count.className = "plan-count";
+  const n = plan.stamps ? plan.stamps.length : 0;
+  count.textContent = n + (n === 1 ? " PIECE" : " PIECES");
+  btn.appendChild(count);
+
+  const meta = document.createElement("div");
+  meta.className = "plan-meta";
+  let seat = "MID";
+  if (plan.centered < 0.35) seat = "LOW";
+  else if (plan.centered > 0.7) seat = "HIGH";
+  meta.textContent = (plan.grow === "stray" ? "STRAY" : "TIGHT") + "  " + seat;
+  btn.appendChild(meta);
 
   const foot = document.createElement("span");
   foot.className = "plan-select";

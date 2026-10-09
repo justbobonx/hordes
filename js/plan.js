@@ -18,15 +18,13 @@ Plan.copy = function (plan) {
   let cols = plan.cols | 0;
   if (!rows && plan.size) rows = plan.size | 0;
   if (!cols && plan.size) cols = plan.size | 0;
-  if (rows < 5) rows = 5;
-  if (cols < 5) cols = 5;
-  if (rows > 16) rows = 16;
-  if (cols > 13) cols = 13;
+  if (rows < 3) rows = 3;
+  if (cols < 3) cols = 3;
   let cities = plan.cities | 0;
   if (cities < 0) cities = 0;
   if (cities > 8) cities = 8;
   const wave = plan.wave | 0 || 1;
-  const openSeat = plan.open === "edge" ? "edge" : "inner";
+  const openSeat = plan.open === "edge" || plan.open === "clipped" ? plan.open : "inner";
   const grow = plan.grow === "stray" ? "stray" : "tight";
   let centered = plan.centered;
   if (centered === undefined || centered === null || centered === "") centered = 0.5;
