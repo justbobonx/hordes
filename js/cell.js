@@ -13,6 +13,7 @@ function Cell(type) {
   this.type = type || "grass";
   this.fill = CELL_TYPES.grass.fill;
   this.mark = null;
+  this.hint = false;
   this.dress();
 }
 
@@ -35,15 +36,25 @@ Cell.prototype.draw = function (ctx, x, y, size) {
   const inset = Math.max(1, size * 0.06);
   ctx.fillStyle = this.fill;
   ctx.fillRect(x + inset, y + inset, size - inset * 2, size - inset * 2);
-  if (!this.mark) return;
   const pad = size * 0.28;
-  ctx.strokeStyle = this.mark;
   ctx.lineWidth = Math.max(2, size * 0.08);
   ctx.lineCap = "square";
+  if (this.mark) {
+    ctx.strokeStyle = this.mark;
+    ctx.beginPath();
+    ctx.moveTo(x + pad, y + pad);
+    ctx.lineTo(x + size - pad, y + size - pad);
+    ctx.moveTo(x + size - pad, y + pad);
+    ctx.lineTo(x + pad, y + size - pad);
+    ctx.stroke();
+  }
+  if (!this.hint) return;
+  const hintPad = size * 0.22;
+  ctx.strokeStyle = "#e07a2f";
   ctx.beginPath();
-  ctx.moveTo(x + pad, y + pad);
-  ctx.lineTo(x + size - pad, y + size - pad);
-  ctx.moveTo(x + size - pad, y + pad);
-  ctx.lineTo(x + pad, y + size - pad);
+  ctx.moveTo(x + hintPad, y + hintPad);
+  ctx.lineTo(x + size - hintPad, y + size - hintPad);
+  ctx.moveTo(x + size - hintPad, y + hintPad);
+  ctx.lineTo(x + hintPad, y + size - hintPad);
   ctx.stroke();
 };

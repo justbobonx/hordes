@@ -6,6 +6,7 @@ function Game() {
   this.grid = null;
   this.initial = null;
   this.queue = [];
+  this.anchors = [];
   this.plan = null;
   this.wave = 1;
   this.cleared = 0;
@@ -88,6 +89,9 @@ Game.prototype.bind = function () {
     menuBackdrop: function (e) {
       if (e.target === self.ui.elMenu) self.ui.hideMenu();
     },
+    hint: function () {
+      self.onHint();
+    },
     reset: function () {
       self.ui.hideMenu();
       self.resetWave();
@@ -135,6 +139,7 @@ Game.prototype.startOver = function () {
   this.grid = null;
   this.initial = null;
   this.queue = [];
+  this.anchors = [];
   this.plan = null;
   this.lost = false;
   this.ended = null;
@@ -220,6 +225,7 @@ Game.prototype.beginWave = function (plan) {
   this.grid = GridBuilder.build(this.plan);
   this.initial = this.grid.types();
   this.queue = this.plan.stamps.slice();
+  this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
   this.lost = false;
   this.ended = null;
   this.elapsedMs = 0;
@@ -236,6 +242,7 @@ Game.prototype.restore = function (data) {
   this.grid = Grid.load(data);
   this.initial = data.initial || this.grid.types();
   this.queue = Array.isArray(data.queue) ? data.queue.slice() : [];
+  this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
   this.plan = Plan.copy(data.plan);
   this.wave = data.wave || this.plan.wave || this.wave;
   this.lost = !!data.lost;
@@ -251,7 +258,7 @@ Game.prototype.restore = function (data) {
 Game.prototype.resetWave = function () {
   if (!this.grid || !this.initial) return;
   this.grid.writeTypes(this.initial);
-  this.grid.dress();
+  this.grid.writeHints(null);
   this.queue = this.plan.stamps.slice();
   this.lost = false;
   this.ended = null;
@@ -329,6 +336,27 @@ Game.prototype.dropAt = function (row, col) {
   if (!cells.length) return;
   if (this.grid.apply(cells)) this.lost = true;
   this.queue.shift();
+  this.persist();
+  this.paint();
+  if (!this.queue.length) this.finish();
+};
+
+Game.prototype.onHint = function () {
+  if (!this.grid || this.ended || !this.queue.length || !this.plan) return;
+  if (this.ui.menuOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.endOpen() || this.ui.startOpen()) return;
+  const index = this.plan.stamps.length - this.queue.length;
+  const seat = this.anchors[index];
+  if (!seat) return;
+  const kind = this.queue[0];
+  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, seat.row, seat.col);
+  if (!cells.length) return;
+  if (this.grid.apply(cells)) this.lost = true;
+  for (let i = 0; i < cells.length; i++) {
+    const cell = this.grid.at(cells[i].r, cells[i].c);
+    if (cell) cell.hint = true;
+  }
+  this.queue.shift();
+  this.clearHold();
   this.persist();
   this.paint();
   if (!this.queue.length) this.finish();
@@ -501,6 +529,8 @@ Game.prototype.persist = function () {
     rows: this.grid.rows,
     cols: this.grid.cols,
     cells: this.grid.types(),
+    hints: this.grid.hintMask(),
+    anchors: this.anchors,
     initial: this.initial,
     queue: this.queue.slice(),
     plan: this.plan,

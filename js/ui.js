@@ -15,7 +15,7 @@ function Ui() {
   this.elEndNote = document.getElementById("end-note");
   this.btnEnd = document.getElementById("btn-end");
   this.btnMenu = document.getElementById("btn-menu");
-  this.btnReset = document.getElementById("btn-reset");
+  this.btnHint = document.getElementById("btn-hint");
   this.btnResetMenu = document.getElementById("btn-reset-menu");
   this.btnGiveUp = document.getElementById("btn-give-up");
   this.btnStart = document.getElementById("btn-start");
@@ -246,7 +246,7 @@ Ui.prototype.bind = function (handlers) {
     if (handlers.planBack) handlers.planBack();
   });
   on(this.btnMenu, "click", handlers.menu);
-  on(this.btnReset, "click", handlers.reset);
+  on(this.btnHint, "click", handlers.hint);
   on(this.btnResetMenu, "click", handlers.reset);
   on(this.btnGiveUp, "click", handlers.giveUp);
   on(this.btnEnd, "click", handlers.end);

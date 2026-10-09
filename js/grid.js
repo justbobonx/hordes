@@ -4,6 +4,7 @@ function Grid(rows, cols) {
   this.rows = rows | 0;
   this.cols = cols | 0 || this.rows;
   this.cells = [];
+  this.anchors = [];
   for (let r = 0; r < this.rows; r++) {
     const row = [];
     for (let c = 0; c < this.cols; c++) row.push(new Cell("grass"));
@@ -105,6 +106,24 @@ Grid.prototype.writeTypes = function (rows) {
   }
 };
 
+Grid.prototype.hintMask = function () {
+  const rows = [];
+  for (let r = 0; r < this.rows; r++) {
+    const row = [];
+    for (let c = 0; c < this.cols; c++) row.push(this.cells[r][c].hint ? 1 : 0);
+    rows.push(row);
+  }
+  return rows;
+};
+
+Grid.prototype.writeHints = function (rows) {
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
+      this.cells[r][c].hint = !!(rows && rows[r] && rows[r][c]);
+    }
+  }
+};
+
 Grid.prototype.dress = function () {
   for (let r = 0; r < this.rows; r++) {
     for (let c = 0; c < this.cols; c++) this.cells[r][c].dress();
@@ -112,7 +131,7 @@ Grid.prototype.dress = function () {
 };
 
 Grid.prototype.dump = function () {
-  return { rows: this.rows, cols: this.cols, cells: this.types() };
+  return { rows: this.rows, cols: this.cols, cells: this.types(), hints: this.hintMask(), anchors: this.anchors || [] };
 };
 
 Grid.load = function (data) {
@@ -122,6 +141,8 @@ Grid.load = function (data) {
   if (!rows || !cols) return null;
   const grid = new Grid(rows, cols);
   grid.writeTypes(data.cells);
+  grid.writeHints(data.hints);
+  grid.anchors = Array.isArray(data.anchors) ? data.anchors : [];
   grid.dress();
   return grid;
 };

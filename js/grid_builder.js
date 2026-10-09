@@ -18,6 +18,7 @@ GridBuilder.build = function (plan) {
     const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, grow, centered);
     if (!built) continue;
     GridBuilder.paintCities(built.grid);
+    built.grid.anchors = built.anchors || [];
     built.grid.dress();
     return built.grid;
   }
@@ -32,6 +33,9 @@ GridBuilder.build = function (plan) {
     if (shape && !(shape.w & 1)) midC = Math.min(cols - 1.5, Math.max(0.5, midC - 0.5));
     const seed = Grid.footprint(rows, cols, kind, midR, midC);
     for (let i = 0; i < seed.length; i++) grid.at(seed[i].r, seed[i].c).setType("horde");
+    grid.anchors = [{ row: midR, col: midC }];
+  } else {
+    grid.anchors = built.anchors || [];
   }
   GridBuilder.paintCities(grid);
   grid.dress();
@@ -59,6 +63,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, grow, centered) {
   const own = [];
   const stampKeep = [];
   const blobSize = [];
+  const anchors = [];
   let nextBlob = 0;
   for (let i = 0; i < stamps.length; i++) {
     let small = false;
@@ -74,9 +79,10 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, grow, centered) {
     const wantNew = i > 0 && grown && left >= 3 && Math.random() < 0.5;
     const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, small, grow, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob);
     if (!placed) return null;
+    anchors.push({ row: placed.row, col: placed.col });
     if (placed.spawned) nextBlob++;
   }
-  return { grid: grid, blobAt: blobAt };
+  return { grid: grid, blobAt: blobAt, anchors: anchors };
 };
 
 GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, grow, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob) {
@@ -182,16 +188,16 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       if (openSeat === "clipped") {
         if (cells.length >= full) return;
       } else if (openSeat === "edge" ? !edge : edge) return;
-      legal.push({ cells: cells, hits: [], join: nextBlob, fr: freshR / fresh, fc: freshC / fresh });
+      legal.push({ cells: cells, hits: [], join: nextBlob, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
       return;
     }
     if (wantNew) {
-      legal.push({ cells: cells, hits: grazes, join: grazes.length ? grazes[0] : nextBlob, fr: freshR / fresh, fc: freshC / fresh });
+      legal.push({ cells: cells, hits: grazes, join: grazes.length ? grazes[0] : nextBlob, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
       return;
     }
     if (join < 0) return;
     if (small && !(blobSize[join] && blobSize[join] < 3)) return;
-    legal.push({ cells: cells, hits: hits, join: join, fr: freshR / fresh, fc: freshC / fresh });
+    legal.push({ cells: cells, hits: hits, join: join, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
   }
 
   if (!rowAnchors.length || !colAnchors.length) return null;
@@ -272,8 +278,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     }
   }
   if (own[id] < keep) return null;
-  if (grow === "stray") return { spawned: spawned };
-  return { spawned: spawned };
+  return { spawned: spawned, row: pick.row, col: pick.col };
 };
 
 GridBuilder.paintCities = function (grid) {
