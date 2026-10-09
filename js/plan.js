@@ -25,13 +25,18 @@ Plan.copy = function (plan) {
   if (cities > 8) cities = 8;
   const wave = plan.wave | 0 || 1;
   const openSeat = plan.open === "edge" || plan.open === "clipped" ? plan.open : "inner";
-  const grow = plan.grow === "stray" ? "stray" : "tight";
   let centered = plan.centered;
   if (centered === undefined || centered === null || centered === "") centered = 0.5;
   centered = +centered;
   if (centered !== centered) centered = 0.5;
   if (centered < 0) centered = 0;
   if (centered > 1) centered = 1;
+  let tight = plan.tight;
+  if (tight === undefined || tight === null || tight === "") tight = 0.5;
+  tight = +tight;
+  if (tight !== tight) tight = 0.5;
+  if (tight < 0) tight = 0;
+  if (tight > 1) tight = 1;
   return {
     wave: wave,
     rows: rows,
@@ -39,8 +44,8 @@ Plan.copy = function (plan) {
     stamps: stamps,
     cities: cities,
     open: openSeat,
-    grow: grow,
     centered: centered,
+    tight: tight,
   };
 };
 

@@ -10,6 +10,13 @@ Planner.INTRO = {
   5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner" },
 };
 
+Planner.bias = function () {
+  const roll = Math.random();
+  if (roll < 1 / 3) return 0.2;
+  if (roll < 2 / 3) return 0.5;
+  return 0.85;
+};
+
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
   const scripted = Planner.INTRO[w];
@@ -71,9 +78,6 @@ Planner.offer = function (wave) {
     rows = cols + delta;
     if (rows < minR) rows = minR;
   }
-  const centeredRoll = Math.random();
-  const centered = centeredRoll < 1 / 3 ? 0.2 : centeredRoll < 2 / 3 ? 0.5 : 0.85;
-  const grow = Math.random() < 2 / 3 ? "tight" : "stray";
   return [{
     plan: Plan.copy({
       wave: w,
@@ -81,8 +85,8 @@ Planner.offer = function (wave) {
       cols: cols,
       stamps: stamps,
       open: "inner",
-      grow: grow,
-      centered: centered,
+      centered: Planner.bias(),
+      tight: Planner.bias(),
     }),
     locked: false,
   }];

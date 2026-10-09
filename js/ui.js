@@ -173,10 +173,9 @@ Ui.prototype.makeCard = function (card, index) {
 
   const meta = document.createElement("div");
   meta.className = "plan-meta";
-  let seat = "MID";
-  if (plan.centered < 0.35) seat = "LOW";
-  else if (plan.centered > 0.7) seat = "HIGH";
-  meta.textContent = (plan.grow === "stray" ? "STRAY" : "TIGHT") + "  " + seat;
+  const tightPct = Math.round((+plan.tight || 0) * 100);
+  const centeredPct = Math.round((+plan.centered || 0) * 100);
+  meta.textContent = "TIGHT:" + tightPct + "%  CENTERED:" + centeredPct + "%";
   btn.appendChild(meta);
 
   const foot = document.createElement("span");

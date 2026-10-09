@@ -7,22 +7,27 @@ GridBuilder.build = function (plan) {
   const cols = plan.cols | 0;
   const stamps = plan.stamps && plan.stamps.length ? plan.stamps.slice() : ["33"];
   const openSeat = plan.open === "edge" || plan.open === "clipped" ? plan.open : "inner";
-  const grow = plan.grow === "stray" ? "stray" : "tight";
   let centered = plan.centered;
   if (centered === undefined || centered === null || centered === "") centered = 0.5;
   centered = +centered;
   if (centered !== centered) centered = 0.5;
   if (centered < 0) centered = 0;
   if (centered > 1) centered = 1;
+  let tight = plan.tight;
+  if (tight === undefined || tight === null || tight === "") tight = 0.5;
+  tight = +tight;
+  if (tight !== tight) tight = 0.5;
+  if (tight < 0) tight = 0;
+  if (tight > 1) tight = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
-    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, grow, centered);
+    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered);
     if (!built) continue;
     GridBuilder.paintCities(built.grid);
     built.grid.anchors = built.anchors || [];
     built.grid.dress();
     return built.grid;
   }
-  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, grow, centered);
+  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered);
   const grid = built ? built.grid : new Grid(rows, cols);
   if (!built) {
     const kind = stamps[0] || "33";
@@ -42,7 +47,7 @@ GridBuilder.build = function (plan) {
   return grid;
 };
 
-GridBuilder.dropAll = function (rows, cols, stamps, openSeat, grow, centered) {
+GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered) {
   const grid = new Grid(rows, cols);
   const cover = [];
   const sole = [];
@@ -77,7 +82,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, grow, centered) {
     }
     const left = stamps.length - i;
     const wantNew = i > 0 && grown && left >= 3 && Math.random() < 0.5;
-    const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, small, grow, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob);
+    const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob);
     if (!placed) return null;
     anchors.push({ row: placed.row, col: placed.col });
     if (placed.spawned) nextBlob++;
@@ -85,7 +90,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, grow, centered) {
   return { grid: grid, blobAt: blobAt, anchors: anchors };
 };
 
-GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, grow, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob) {
+GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob) {
   const rows = grid.rows;
   const cols = grid.cols;
   const shape = Grid.STAMP_DEFINITIONS[kind];
@@ -200,6 +205,81 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     legal.push({ cells: cells, hits: hits, join: join, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
   }
 
+  function flushOf(seat) {
+    if (first || wantNew || seat.join === nextBlob) return 1;
+    const hit = [];
+    const sources = seat.hits && seat.hits.length ? seat.hits : [seat.join];
+    for (let h = 0; h < sources.length; h++) hit[sources[h]] = 1;
+    const cells = seat.cells;
+    const inNew = {};
+    let minR = rows;
+    let maxR = 0;
+    let minC = cols;
+    let maxC = 0;
+    for (let i = 0; i < cells.length; i++) {
+      const r = cells[i].r;
+      const c = cells[i].c;
+      inNew[r + "," + c] = 1;
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+    const spanH = maxR - minR + 1;
+    const spanW = maxC - minC + 1;
+    const vert = {};
+    const horiz = {};
+    function add(map, key, at) {
+      if (!map[key]) map[key] = [];
+      map[key].push(at);
+    }
+    for (let i = 0; i < cells.length; i++) {
+      const r = cells[i].r;
+      const c = cells[i].c;
+      if (blobAt[r][c] >= 0 && hit[blobAt[r][c]]) {
+        add(vert, "o" + c, r);
+        add(horiz, "o" + r, c);
+      }
+      for (let d = 0; d < 4; d++) {
+        const rr = r + dirs[d][0];
+        const cc = c + dirs[d][1];
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        if (inNew[rr + "," + cc]) continue;
+        if (blobAt[rr][cc] < 0 || !hit[blobAt[rr][cc]]) continue;
+        if (rr !== r) add(horiz, "a" + r + ":" + rr, c);
+        else add(vert, "a" + c + ":" + cc, r);
+      }
+    }
+    function longest(map) {
+      let best = 0;
+      const keys = Object.keys(map);
+      for (let k = 0; k < keys.length; k++) {
+        const list = map[keys[k]];
+        list.sort(function (a, b) {
+          return a - b;
+        });
+        let run = 1;
+        for (let i = 1; i < list.length; i++) {
+          if (list[i] === list[i - 1]) continue;
+          if (list[i] === list[i - 1] + 1) run++;
+          else {
+            if (run > best) best = run;
+            run = 1;
+          }
+        }
+        if (run > best) best = run;
+      }
+      return best;
+    }
+    const vRun = longest(vert);
+    const hRun = longest(horiz);
+    let flush = 0;
+    if (spanH && vRun / spanH > flush) flush = vRun / spanH;
+    if (spanW && hRun / spanW > flush) flush = hRun / spanW;
+    if (flush > 1) flush = 1;
+    return flush;
+  }
+
   if (!rowAnchors.length || !colAnchors.length) return null;
   for (let ri = 0; ri < rowAnchors.length; ri++) {
     for (let ci = 0; ci < colAnchors.length; ci++) consider(rowAnchors[ri], colAnchors[ci]);
@@ -223,8 +303,9 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       }
       if (n) affinity = affinity * 0.5 + near(seat.fr, seat.fc, br / n, bc / n) * 0.5;
     }
+    const flush = flushOf(seat);
     const noise = 0.6 + Math.random() * 0.4;
-    seat.weight = ((1 - centered) + centered * affinity) * noise;
+    seat.weight = ((1 - centered) + centered * affinity) * ((1 - tight) + tight * flush) * noise;
     if (seat.weight < 0.05) seat.weight = 0.05;
     total += seat.weight;
   }
