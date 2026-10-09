@@ -23,6 +23,10 @@ function Game() {
   this.preview = null;
   this.origin = { x: 0, y: 0, cell: 32, rows: 6, cols: 6 };
   this.bound = false;
+  this.propMs = 167;
+  this.actions = [];
+  this.actionTimer = 0;
+  this.stampHeld = false;
 }
 
 Game.prototype.boot = function () {
@@ -46,11 +50,17 @@ Game.prototype.boot = function () {
   });
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
+      self.flushActions();
       self.pauseClock();
       self.persist();
     } else if (self.grid && !self.ended && !self.ui.startOpen()) {
       self.clockOn = Date.now();
     }
+  });
+  window.addEventListener("pagehide", function () {
+    self.flushActions();
+    self.pauseClock();
+    self.persist();
   });
 };
 
@@ -131,6 +141,7 @@ Game.prototype.bind = function () {
 };
 
 Game.prototype.startOver = function () {
+  this.abortActions();
   Save.clearBoard();
   Save.clearRun();
   this.wave = 1;
@@ -221,6 +232,7 @@ Game.prototype.onPlan = function (card) {
 };
 
 Game.prototype.beginWave = function (plan) {
+  this.abortActions();
   this.plan = Plan.copy(plan);
   this.grid = GridBuilder.build(this.plan);
   this.initial = this.grid.types();
@@ -239,6 +251,7 @@ Game.prototype.beginWave = function (plan) {
 };
 
 Game.prototype.restore = function (data) {
+  this.abortActions();
   this.grid = Grid.load(data);
   this.initial = data.initial || this.grid.types();
   this.queue = Array.isArray(data.queue) ? data.queue.slice() : [];
@@ -257,6 +270,7 @@ Game.prototype.restore = function (data) {
 
 Game.prototype.resetWave = function () {
   if (!this.grid || !this.initial) return;
+  this.abortActions();
   this.grid.writeTypes(this.initial);
   this.grid.writeHints(null);
   this.queue = this.plan.stamps.slice();
@@ -271,6 +285,7 @@ Game.prototype.resetWave = function () {
 };
 
 Game.prototype.giveUp = function () {
+  this.abortActions();
   this.pauseClock();
   this.clearHold();
   this.ui.hideMenu();
@@ -322,48 +337,217 @@ Game.prototype.showEnd = function () {
 
 Game.prototype.finish = function () {
   if (this.ended) return;
+  if (this.actions.length || this.stampHeld) return;
   const clear = this.grid.redCount() === 0 && !this.lost && this.grid.ruinedCount() === 0;
   this.ended = clear ? "win" : "lose";
   this.showEnd();
   this.paint();
 };
 
+Game.prototype.waiting = function () {
+  return this.actions.length > 0 || this.stampHeld;
+};
+
 Game.prototype.dropAt = function (row, col) {
-  if (!this.grid || this.ended || !this.queue.length) return;
+  if (!this.grid || this.ended || !this.queue.length || this.waiting()) return;
   if (this.ui.menuOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.endOpen()) return;
-  const kind = this.queue[0];
-  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, row, col);
-  if (!cells.length) return;
-  if (this.grid.apply(cells)) this.lost = true;
-  this.queue.shift();
-  this.persist();
-  this.paint();
-  if (!this.queue.length) this.finish();
+  this.beginDrop(row, col, false);
 };
 
 Game.prototype.onHint = function () {
-  if (!this.grid || this.ended || !this.queue.length || !this.plan) return;
+  if (!this.grid || this.ended || !this.queue.length || !this.plan || this.waiting()) return;
   if (this.ui.menuOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.endOpen() || this.ui.startOpen()) return;
   const index = this.plan.stamps.length - this.queue.length;
   const seat = this.anchors[index];
   if (!seat) return;
+  this.beginDrop(seat.row, seat.col, true);
+};
+
+Game.prototype.beginDrop = function (row, col, hint) {
   const kind = this.queue[0];
-  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, seat.row, seat.col);
+  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, row, col);
   if (!cells.length) return;
-  if (this.grid.apply(cells)) this.lost = true;
-  for (let i = 0; i < cells.length; i++) {
-    const cell = this.grid.at(cells[i].r, cells[i].c);
-    if (cell) cell.hint = true;
+  const have = {};
+  for (let i = 0; i < cells.length; i++) have[cells[i].r + "," + cells[i].c] = true;
+  const rowHalf = row !== Math.floor(row);
+  const colHalf = col !== Math.floor(col);
+  const r0 = rowHalf ? Math.floor(row) : row;
+  const c0 = colHalf ? Math.floor(col) : col;
+  const r1 = rowHalf ? r0 + 1 : r0;
+  const c1 = colHalf ? c0 + 1 : c0;
+  const candidates = [
+    { r: r0, c: c0 },
+    { r: r0, c: c1 },
+    { r: r1, c: c0 },
+    { r: r1, c: c1 },
+  ];
+  const seeds = [];
+  const seen = {};
+  for (let i = 0; i < candidates.length; i++) {
+    const key = candidates[i].r + "," + candidates[i].c;
+    if (seen[key] || !have[key]) continue;
+    seen[key] = true;
+    seeds.push(candidates[i]);
   }
-  this.queue.shift();
+  if (!seeds.length) return;
+  if (!this.enqueueProp(cells, seeds, hint)) return;
+  this.stampHeld = true;
   this.clearHold();
+  this.persist();
+  this.paint();
+  this.kickActions();
+};
+
+// cells and seeds are { r, c }. Seeds must sit in cells. Later effects call this from onCellLand.
+Game.prototype.enqueueProp = function (cells, seeds, hint) {
+  if (!cells || !cells.length || !seeds || !seeds.length) return null;
+  const have = {};
+  for (let i = 0; i < cells.length; i++) have[cells[i].r + "," + cells[i].c] = cells[i];
+  const frontier = [];
+  const seen = {};
+  for (let i = 0; i < seeds.length; i++) {
+    const key = seeds[i].r + "," + seeds[i].c;
+    if (seen[key] || !have[key]) continue;
+    seen[key] = true;
+    frontier.push(have[key]);
+  }
+  if (!frontier.length) return null;
+  const action = {
+    type: "wave",
+    hint: !!hint,
+    cells: cells,
+    have: have,
+    frontier: frontier,
+    landed: {},
+    stopped: false,
+    done: false,
+  };
+  this.actions.push(action);
+  return action;
+};
+
+// Return { stop: true } to keep the wave from leaving this cell.
+// Set action.stopped to halt the wave after this generation.
+// enqueueProp from here to start another prop. The wait stays up until those drain.
+Game.prototype.onCellLand = function (action, r, c) {
+  return null;
+};
+
+Game.prototype.kickActions = function () {
+  if (this.actionTimer || !this.actions.length) return;
+  const self = this;
+  this.actionTimer = window.setTimeout(function () {
+    self.actionTimer = 0;
+    self.stepActions();
+  }, this.propMs);
+};
+
+Game.prototype.stepActions = function () {
+  if (!this.grid || !this.actions.length) {
+    this.settleStamp();
+    return;
+  }
+  const action = this.actions[0];
+  if (action.type === "wave") this.stepWave(action);
+  if (action.done) this.actions.shift();
+  this.paint();
+  if (this.actions.length) this.kickActions();
+  else this.settleStamp();
+};
+
+Game.prototype.stepWave = function (action) {
+  const spreaders = [];
+  for (let i = 0; i < action.frontier.length; i++) {
+    const hit = action.frontier[i];
+    const key = hit.r + "," + hit.c;
+    if (action.landed[key]) continue;
+    action.landed[key] = true;
+    if (this.grid.apply([hit])) this.lost = true;
+    if (action.hint) {
+      const cell = this.grid.at(hit.r, hit.c);
+      if (cell) cell.hint = true;
+    }
+    const spread = this.onCellLand(action, hit.r, hit.c);
+    if (action.stopped || (spread && spread.stop)) continue;
+    spreaders.push(hit);
+  }
+  if (action.stopped) {
+    action.done = true;
+    return;
+  }
+  const next = [];
+  const nextSeen = {};
+  const dirs = [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
+  ];
+  for (let i = 0; i < spreaders.length; i++) {
+    const hit = spreaders[i];
+    for (let d = 0; d < dirs.length; d++) {
+      const rr = hit.r + dirs[d][0];
+      const cc = hit.c + dirs[d][1];
+      const nkey = rr + "," + cc;
+      if (!action.have[nkey] || action.landed[nkey] || nextSeen[nkey]) continue;
+      nextSeen[nkey] = true;
+      next.push(action.have[nkey]);
+    }
+  }
+  if (!next.length) action.done = true;
+  else action.frontier = next;
+};
+
+Game.prototype.settleStamp = function () {
+  if (this.actions.length) return;
+  if (this.stampHeld) {
+    this.queue.shift();
+    this.stampHeld = false;
+  }
   this.persist();
   this.paint();
   if (!this.queue.length) this.finish();
 };
 
+Game.prototype.flushActions = function () {
+  if (this.actionTimer) window.clearTimeout(this.actionTimer);
+  this.actionTimer = 0;
+  while (this.actions.length && this.grid) {
+    const action = this.actions[0];
+    if (action.type === "wave" && !action.stopped) {
+      for (let i = 0; i < action.cells.length; i++) {
+        const hit = action.cells[i];
+        const key = hit.r + "," + hit.c;
+        if (action.landed[key]) continue;
+        action.landed[key] = true;
+        if (this.grid.apply([hit])) this.lost = true;
+        if (action.hint) {
+          const cell = this.grid.at(hit.r, hit.c);
+          if (cell) cell.hint = true;
+        }
+        this.onCellLand(action, hit.r, hit.c);
+      }
+    }
+    action.done = true;
+    this.actions.shift();
+  }
+  this.actions = [];
+  if (this.stampHeld) {
+    this.queue.shift();
+    this.stampHeld = false;
+  }
+  if (this.grid && !this.queue.length) this.finish();
+};
+
+Game.prototype.abortActions = function () {
+  if (this.actionTimer) window.clearTimeout(this.actionTimer);
+  this.actionTimer = 0;
+  this.actions = [];
+  this.stampHeld = false;
+};
+
 Game.prototype.onDown = function (e) {
-  if (!this.grid || this.ended) return;
+  if (!this.grid || this.ended || this.waiting()) return;
   if (this.ui.menuOpen() || this.ui.endOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
   e.preventDefault();
   const hit = this.aim(e);
@@ -403,7 +587,7 @@ Game.prototype.clearHold = function () {
 };
 
 Game.prototype.aim = function (e) {
-  if (!this.grid || !this.queue.length) return null;
+  if (!this.grid || !this.queue.length || this.waiting()) return null;
   const shape = Grid.STAMP_DEFINITIONS[this.queue[0]];
   if (!shape) return null;
   const rect = this.ui.canvas.getBoundingClientRect();
@@ -486,15 +670,26 @@ Game.prototype.drawBoard = function (ctx) {
       this.grid.at(r, c).draw(ctx, o.x + c * o.cell, o.y + r * o.cell, o.cell);
     }
   }
-  if (!this.preview || !this.queue.length) return;
-  const kind = this.queue[0];
-  const cells = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
   ctx.strokeStyle = "#f2e27a";
   ctx.lineWidth = Math.max(2, o.cell * 0.07);
+  const inset = Math.max(2, o.cell * 0.1);
+  for (let a = 0; a < this.actions.length; a++) {
+    const action = this.actions[a];
+    if (action.type !== "wave") continue;
+    for (let i = 0; i < action.cells.length; i++) {
+      const hit = action.cells[i];
+      if (action.landed[hit.r + "," + hit.c]) continue;
+      const x = o.x + hit.c * o.cell;
+      const y = o.y + hit.r * o.cell;
+      ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
+    }
+  }
+  if (!this.preview || !this.queue.length || this.waiting()) return;
+  const kind = this.queue[0];
+  const cells = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
   for (let i = 0; i < cells.length; i++) {
     const x = o.x + cells[i].c * o.cell;
     const y = o.y + cells[i].r * o.cell;
-    const inset = Math.max(2, o.cell * 0.1);
     ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
   }
   const ax = o.x + (this.preview.col + 0.5) * o.cell;
