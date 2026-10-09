@@ -5,9 +5,9 @@ function Planner() {}
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], open: "inner" },
   2: { cols: 6, rows: 7, stamps: ["33"], open: "clipped" },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner" },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "edge" },
-  5: { cols: 9, rows: 10, stamps: ["33", "35", "53"], open: "inner" },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "edge" },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped" },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner" },
 };
 
 Planner.offer = function (wave) {

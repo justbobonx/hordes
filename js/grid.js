@@ -13,13 +13,13 @@ function Grid(rows, cols) {
 }
 
 Grid.STAMP_DEFINITIONS = {
-  "33": { w: 3, h: 3, p: 30, minlevel: 1 },
+  "33": { w: 3, h: 3, p: 15, minlevel: 1 },
   "35": { w: 3, h: 5, p: 20, minlevel: 4 },
   "53": { w: 5, h: 3, p: 20, minlevel: 4 },
   "24": { w: 2, h: 4, p: 20, minlevel: 5 },
   "42": { w: 4, h: 2, p: 20, minlevel: 5 },
-  "45": { w: 4, h: 5, p: 10, minlevel: 7 },
-  "54": { w: 5, h: 4, p: 10, minlevel: 7 },
+  "45": { w: 4, h: 5, p: 15, minlevel: 7 },
+  "54": { w: 5, h: 4, p: 15, minlevel: 7 },
   "15": { w: 1, h: 5, p: 10, minlevel: 8 },
   "51": { w: 5, h: 1, p: 10, minlevel: 8 },
 };
