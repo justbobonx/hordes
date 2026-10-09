@@ -3,7 +3,7 @@
 function Plan() {}
 
 Plan.blank = function () {
-  return { wave: 1, rows: 6, cols: 6, stamps: ["33"], cities: 0 };
+  return { wave: 1, rows: 6, cols: 6, stamps: ["33"] };
 };
 
 Plan.copy = function (plan) {
@@ -27,6 +27,13 @@ Plan.copy = function (plan) {
   if (cities > 8) cities = 8;
   const wave = plan.wave | 0 || 1;
   const openSeat = plan.open === "edge" ? "edge" : "inner";
+  const grow = plan.grow === "stray" ? "stray" : "tight";
+  let centered = plan.centered;
+  if (centered === undefined || centered === null || centered === "") centered = 0.5;
+  centered = +centered;
+  if (centered !== centered) centered = 0.5;
+  if (centered < 0) centered = 0;
+  if (centered > 1) centered = 1;
   return {
     wave: wave,
     rows: rows,
@@ -34,6 +41,8 @@ Plan.copy = function (plan) {
     stamps: stamps,
     cities: cities,
     open: openSeat,
+    grow: grow,
+    centered: centered,
   };
 };
 

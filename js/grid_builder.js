@@ -2,20 +2,26 @@
 
 function GridBuilder() {}
 
-GridBuilder.RED_CAP = 0.66;
-
 GridBuilder.build = function (plan) {
   const rows = plan.rows | 0;
   const cols = plan.cols | 0;
   const stamps = plan.stamps && plan.stamps.length ? plan.stamps.slice() : ["33"];
+  const openSeat = plan.open === "edge" ? "edge" : "inner";
+  const grow = plan.grow === "stray" ? "stray" : "tight";
+  let centered = plan.centered;
+  if (centered === undefined || centered === null || centered === "") centered = 0.5;
+  centered = +centered;
+  if (centered !== centered) centered = 0.5;
+  if (centered < 0) centered = 0;
+  if (centered > 1) centered = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
-    const built = GridBuilder.dropAll(rows, cols, stamps, plan.open === "edge" ? "edge" : "inner", attempt > 24);
+    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, grow, centered);
     if (!built) continue;
     GridBuilder.paintCities(built.grid);
     built.grid.dress();
     return built.grid;
   }
-  const built = GridBuilder.dropAll(rows, cols, stamps, plan.open === "edge" ? "edge" : "inner", true);
+  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, grow, centered);
   const grid = built ? built.grid : new Grid(rows, cols);
   if (!built) {
     const kind = stamps[0] || "33";
@@ -32,7 +38,7 @@ GridBuilder.build = function (plan) {
   return grid;
 };
 
-GridBuilder.dropAll = function (rows, cols, stamps, openSeat, relax) {
+GridBuilder.dropAll = function (rows, cols, stamps, openSeat, grow, centered) {
   const grid = new Grid(rows, cols);
   const cover = [];
   const sole = [];
@@ -51,26 +57,31 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, relax) {
     blobAt.push(brow);
   }
   const own = [];
+  const stampFull = [];
   const blobSize = [];
   let nextBlob = 0;
   for (let i = 0; i < stamps.length; i++) {
-    let open = blobSize.length > 0;
+    let small = false;
+    let grown = blobSize.length > 0;
     for (let b = 0; b < blobSize.length; b++) {
-      if (blobSize[b] < 3) open = false;
+      if (!blobSize[b]) continue;
+      if (blobSize[b] < 3) {
+        small = true;
+        grown = false;
+      }
     }
-    const wantNew = open && Math.random() < 0.5;
-    const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, open, relax, cover, sole, blobAt, own, blobSize, nextBlob);
+    const left = stamps.length - i;
+    const wantNew = i > 0 && grown && left >= 3 && Math.random() < 0.5;
+    const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, small, grow, centered, cover, sole, blobAt, own, stampFull, blobSize, nextBlob);
     if (!placed) return null;
-    if (placed.blob === nextBlob) nextBlob++;
-    blobSize[placed.blob] = (blobSize[placed.blob] || 0) + 1;
+    if (placed.spawned) nextBlob++;
   }
   return { grid: grid, blobAt: blobAt };
 };
 
-GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open, relax, cover, sole, blobAt, own, blobSize, nextBlob) {
+GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, grow, centered, cover, sole, blobAt, own, stampFull, blobSize, nextBlob) {
   const rows = grid.rows;
   const cols = grid.cols;
-  const cap = Math.floor(rows * cols * GridBuilder.RED_CAP);
   const shape = Grid.STAMP_DEFINITIONS[kind];
   const full = shape ? shape.w * shape.h : 0;
   const rowAnchors = [];
@@ -91,26 +102,41 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open
     [0, 1],
     [0, -1],
   ];
-  const pools = {
-    attach: { inner: [], edge: [], clipped: [] },
-    free: { inner: [], edge: [], clipped: [] },
-  };
+  const midR = (rows - 1) / 2;
+  const midC = (cols - 1) / 2;
+  const span = Math.sqrt(midR * midR + midC * midC) || 1;
+  const legal = [];
+
+  function near(r, c, tr, tc) {
+    const dr = r - tr;
+    const dc = c - tc;
+    const dist = Math.sqrt(dr * dr + dc * dc) / span;
+    return dist > 1 ? 0 : 1 - dist;
+  }
 
   function consider(row, col) {
     const cells = Grid.footprint(rows, cols, kind, row, col);
-    if (!cells.length) return;
+    if (!cells.length || !full) return;
     let fresh = 0;
-    let overlap = 0;
+    let freshR = 0;
+    let freshC = 0;
     const lost = [];
-    const touched = [];
+    const touch = [];
+    function mark(blob, r, c) {
+      if (blob < 0) return;
+      if (!touch[blob]) touch[blob] = [];
+      const key = r + "," + c;
+      if (touch[blob].indexOf(key) < 0) touch[blob].push(key);
+    }
     for (let i = 0; i < cells.length; i++) {
       const r = cells[i].r;
       const c = cells[i].c;
-      if (cover[r][c] === 0) fresh++;
-      else {
-        overlap++;
-        const blob = blobAt[r][c];
-        if (touched.indexOf(blob) < 0) touched.push(blob);
+      if (cover[r][c] === 0) {
+        fresh++;
+        freshR += r;
+        freshC += c;
+      } else {
+        mark(blobAt[r][c], r, c);
         if (cover[r][c] === 1) {
           const owner = sole[r][c];
           lost[owner] = (lost[owner] || 0) + 1;
@@ -125,57 +151,102 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open
         if (cover[rr][cc] === 0) continue;
         let inside = false;
         for (let k = 0; k < cells.length; k++) {
-          if (cells[k].r === rr && cells[k].c === cc) {
-            inside = true;
-            break;
-          }
+          if (cells[k].r === rr && cells[k].c === cc) inside = true;
         }
-        if (inside) continue;
-        const blob = blobAt[rr][cc];
-        if (touched.indexOf(blob) < 0) touched.push(blob);
+        if (!inside) mark(blobAt[rr][cc], rr, cc);
       }
     }
-    if (fresh < 1) return;
-    if (grid.redCount() + fresh > cap) return;
+    if (fresh * 2 <= full) return;
     for (let s = 0; s < id; s++) {
-      if (own[s] - (lost[s] || 0) < 1) return;
+      if ((own[s] - (lost[s] || 0)) * 2 <= stampFull[s]) return;
     }
-    let seat = "inner";
-    if (cells.length < full) seat = "clipped";
-    else {
+    const hits = [];
+    const grazes = [];
+    let join = -1;
+    for (let b = 0; b < touch.length; b++) {
+      if (!touch[b] || !touch[b].length) continue;
+      grazes.push(b);
+      if (touch[b].length < 2) continue;
+      hits.push(b);
+      if (join < 0) join = b;
+      if (small && blobSize[b] && blobSize[b] < 3) join = b;
+    }
+    if (first) {
+      let edge = false;
       for (let i = 0; i < cells.length; i++) {
         const r = cells[i].r;
         const c = cells[i].c;
-        if (r === 0 || c === 0 || r === rows - 1 || c === cols - 1) {
-          seat = "edge";
-          break;
-        }
+        if (r === 0 || c === 0 || r === rows - 1 || c === cols - 1) edge = true;
       }
+      if (openSeat === "edge" ? !edge : edge) return;
+      legal.push({ cells: cells, hits: [], join: nextBlob, fr: freshR / fresh, fc: freshC / fresh });
+      return;
     }
-    const hit = { cells: cells, fresh: fresh };
-    if (!touched.length) pools.free[seat].push(hit);
-    else if (touched.length === 1 && (overlap > 0 || true)) pools.attach[seat].push(hit);
+    if (wantNew) {
+      legal.push({ cells: cells, hits: grazes, join: grazes.length ? grazes[0] : nextBlob, fr: freshR / fresh, fc: freshC / fresh });
+      return;
+    }
+    if (join < 0) return;
+    if (small && !(blobSize[join] && blobSize[join] < 3)) return;
+    legal.push({ cells: cells, hits: hits, join: join, fr: freshR / fresh, fc: freshC / fresh });
   }
 
   if (!rowAnchors.length || !colAnchors.length) return null;
-  for (let t = 0; t < 180; t++) consider(rowAnchors[(Math.random() * rowAnchors.length) | 0], colAnchors[(Math.random() * colAnchors.length) | 0]);
-  let bag = GridBuilder.pickBag(pools, first, openSeat, wantNew, open, relax);
-  if (!bag || !bag.length) {
-    pools.attach = { inner: [], edge: [], clipped: [] };
-    pools.free = { inner: [], edge: [], clipped: [] };
-    for (let ri = 0; ri < rowAnchors.length; ri++) {
-      for (let ci = 0; ci < colAnchors.length; ci++) consider(rowAnchors[ri], colAnchors[ci]);
+  for (let ri = 0; ri < rowAnchors.length; ri++) {
+    for (let ci = 0; ci < colAnchors.length; ci++) consider(rowAnchors[ri], colAnchors[ci]);
+  }
+  if (!legal.length) return null;
+  let total = 0;
+  for (let i = 0; i < legal.length; i++) {
+    const seat = legal[i];
+    let affinity = near(seat.fr, seat.fc, midR, midC);
+    if (!first && seat.join !== nextBlob) {
+      let n = 0;
+      let br = 0;
+      let bc = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (blobAt[r][c] !== seat.join) continue;
+          n++;
+          br += r;
+          bc += c;
+        }
+      }
+      if (n) affinity = affinity * 0.5 + near(seat.fr, seat.fc, br / n, bc / n) * 0.5;
     }
-    bag = GridBuilder.pickBag(pools, first, openSeat, wantNew, open, relax);
+    const noise = 0.6 + Math.random() * 0.4;
+    seat.weight = ((1 - centered) + centered * affinity) * noise;
+    if (seat.weight < 0.05) seat.weight = 0.05;
+    total += seat.weight;
   }
-  if (!bag || !bag.length) return null;
-  const pick = bag[(Math.random() * bag.length) | 0];
-  let blob = nextBlob;
-  for (let i = 0; i < pick.cells.length; i++) {
-    const r = pick.cells[i].r;
-    const c = pick.cells[i].c;
-    if (cover[r][c] > 0 && blobAt[r][c] >= 0) blob = blobAt[r][c];
+  let roll = Math.random() * total;
+  let pick = legal[legal.length - 1];
+  for (let i = 0; i < legal.length; i++) {
+    roll -= legal[i].weight;
+    if (roll <= 0) {
+      pick = legal[i];
+      break;
+    }
   }
+  let keeper = pick.join;
+  let spawned = keeper === nextBlob;
+  if (pick.hits.length) {
+    spawned = false;
+    if (pick.hits.indexOf(keeper) < 0) keeper = pick.hits[0];
+    for (let h = 0; h < pick.hits.length; h++) {
+      const other = pick.hits[h];
+      if (other === keeper) continue;
+      blobSize[keeper] = (blobSize[keeper] || 0) + (blobSize[other] || 0);
+      blobSize[other] = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (blobAt[r][c] === other) blobAt[r][c] = keeper;
+        }
+      }
+    }
+  }
+  blobSize[keeper] = (blobSize[keeper] || 0) + 1;
+  stampFull[id] = full;
   own[id] = 0;
   for (let i = 0; i < pick.cells.length; i++) {
     const r = pick.cells[i].r;
@@ -184,55 +255,22 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open
     if (cover[r][c] === 0) {
       cover[r][c] = 1;
       sole[r][c] = id;
-      blobAt[r][c] = blob;
+      blobAt[r][c] = keeper;
       own[id]++;
       if (!cell.is("horde")) cell.setType("horde");
     } else if (cover[r][c] === 1) {
       own[sole[r][c]]--;
       sole[r][c] = -1;
       cover[r][c] = 2;
-    } else cover[r][c]++;
-  }
-  if (own[id] < 1) return null;
-  return { blob: blob };
-};
-
-GridBuilder.pickBag = function (pools, first, openSeat, wantNew, open, relax) {
-  function weighted(group) {
-    const seats = [
-      ["inner", 2],
-      ["edge", 2],
-      ["clipped", 2],
-    ];
-    let total = 0;
-    const bag = [];
-    for (let i = 0; i < seats.length; i++) {
-      if (!group[seats[i][0]].length) continue;
-      total += seats[i][1];
-      bag.push(seats[i]);
+      blobAt[r][c] = keeper;
+    } else {
+      cover[r][c]++;
+      blobAt[r][c] = keeper;
     }
-    if (!total) return null;
-    let roll = Math.random() * total;
-    for (let i = 0; i < bag.length; i++) {
-      roll -= bag[i][1];
-      if (roll < 0) return group[bag[i][0]];
-    }
-    return group[bag[bag.length - 1][0]];
   }
-  if (first) {
-    if (openSeat === "edge" && pools.free.edge.length) return pools.free.edge;
-    if (pools.free.inner.length) return pools.free.inner;
-    if (relax && pools.free.edge.length) return pools.free.edge;
-    return null;
-  }
-  if (wantNew) {
-    if (pools.free.edge.length) return pools.free.edge;
-    if (relax && pools.free.inner.length) return pools.free.inner;
-  }
-  const attached = weighted(pools.attach);
-  if (attached) return attached;
-  if (open && pools.free.edge.length) return pools.free.edge;
-  return null;
+  if (own[id] * 2 <= full) return null;
+  if (grow === "stray") return { spawned: spawned };
+  return { spawned: spawned };
 };
 
 GridBuilder.paintCities = function (grid) {

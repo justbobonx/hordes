@@ -3,14 +3,11 @@
 function Planner() {}
 
 Planner.INTRO = {
-  1: { cols: 6, rows: 6, stamps: ["33"], cities: 0, open: "inner" },
-  2: { cols: 6, rows: 7, stamps: ["33"], cities: 1, open: "edge" },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], cities: 1, open: "inner" },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], cities: 2, open: "inner" },
-  6: { cols: 8, rows: 8, stamps: ["33", "53"], cities: 2, open: "inner" },
-  8: { cols: 8, rows: 9, stamps: ["33", "55"], cities: 2, open: "inner" },
-  12: { cols: 9, rows: 10, stamps: ["33", "33", "51"], cities: 3, open: "inner" },
-  13: { cols: 9, rows: 10, stamps: ["33", "35", "15"], cities: 3, open: "inner" },
+  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner" },
+  2: { cols: 6, rows: 7, stamps: ["33"], open: "edge" },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner" },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "edge" },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "53"], open: "inner" },
 };
 
 Planner.offer = function (wave) {
