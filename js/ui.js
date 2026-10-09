@@ -174,11 +174,6 @@ Ui.prototype.makeCard = function (card, index) {
   }
   btn.appendChild(stamps);
 
-  const cities = document.createElement("div");
-  cities.className = "plan-cities";
-  cities.textContent = plan.cities + " CITIES";
-  btn.appendChild(cities);
-
   const foot = document.createElement("span");
   foot.className = "plan-select";
   foot.textContent = "SELECT";
