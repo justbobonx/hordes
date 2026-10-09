@@ -162,7 +162,7 @@ Ui.prototype.makeCard = function (card, index) {
 
   const size = document.createElement("div");
   size.className = "plan-size";
-  size.textContent = plan.cols + "\u00d7" + plan.rows;
+  size.textContent = plan.stamps.length + (plan.stamps.length === 1 ? " STAMP" : " STAMPS");
   btn.appendChild(size);
 
   const stamps = document.createElement("div");
