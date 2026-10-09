@@ -1,304 +1,242 @@
-/** Pack stamps in a sandbox, then seat the blob. Cities paint after the seat. */
+/** Drop stamps from an inner start, then backfill cities. */
 
 function GridBuilder() {}
 
-GridBuilder.MIN_SOLE = 2;
+GridBuilder.RED_CAP = 0.66;
 
 GridBuilder.build = function (plan) {
+  const rows = plan.rows | 0;
+  const cols = plan.cols | 0;
   const stamps = plan.stamps && plan.stamps.length ? plan.stamps.slice() : ["33"];
   const cityN = plan.cities | 0;
-  const clip = plan.clip | 0;
-  for (let attempt = 0; attempt < 28; attempt++) {
-    const pack = GridBuilder.pack(stamps, attempt > 18);
-    if (!pack) continue;
-    const grid = GridBuilder.seat(pack, clip, attempt);
-    if (!grid) continue;
-    GridBuilder.paintCities(grid, cityN);
-    grid.dress();
-    return grid;
+  for (let attempt = 0; attempt < 36; attempt++) {
+    const built = GridBuilder.dropAll(rows, cols, stamps, plan.open === "edge" ? "edge" : "inner", attempt > 24);
+    if (!built) continue;
+    GridBuilder.paintCities(built.grid, cityN, built.blobAt);
+    built.grid.dress();
+    return built.grid;
   }
-  const pack = GridBuilder.pack([stamps[0] || "33"], true) || { cells: [{ r: 0, c: 0 }, { r: 0, c: 1 }, { r: 1, c: 0 }, { r: 1, c: 1 }] };
-  const grid = GridBuilder.seat(pack, clip, 0) || new Grid(6, 6);
-  GridBuilder.paintCities(grid, cityN);
+  const built = GridBuilder.dropAll(rows, cols, stamps, plan.open === "edge" ? "edge" : "inner", true);
+  const grid = built ? built.grid : new Grid(rows, cols);
+  if (!built) {
+    const kind = stamps[0] || "33";
+    const shape = Grid.STAMP_DEFINITIONS[kind];
+    let midR = (rows / 2) | 0;
+    let midC = (cols / 2) | 0;
+    if (shape && !(shape.h & 1)) midR = Math.min(rows - 1.5, Math.max(0.5, midR - 0.5));
+    if (shape && !(shape.w & 1)) midC = Math.min(cols - 1.5, Math.max(0.5, midC - 0.5));
+    const seed = Grid.footprint(rows, cols, kind, midR, midC);
+    for (let i = 0; i < seed.length; i++) grid.at(seed[i].r, seed[i].c).setType("horde");
+  }
+  GridBuilder.paintCities(grid, cityN, built ? built.blobAt : null);
   grid.dress();
   return grid;
 };
 
-GridBuilder.pack = function (stamps, relax) {
-  const placed = [];
-  const pending = [];
-  for (let i = 0; i < stamps.length; i++) pending.push({ id: i, kind: stamps[i] });
+GridBuilder.dropAll = function (rows, cols, stamps, openSeat, relax) {
+  const grid = new Grid(rows, cols);
+  const cover = [];
+  const sole = [];
+  const blobAt = [];
+  for (let r = 0; r < rows; r++) {
+    const crow = [];
+    const srow = [];
+    const brow = [];
+    for (let c = 0; c < cols; c++) {
+      crow.push(0);
+      srow.push(-1);
+      brow.push(-1);
+    }
+    cover.push(crow);
+    sole.push(srow);
+    blobAt.push(brow);
+  }
+  const own = [];
+  const blobSize = [];
+  let nextBlob = 0;
+  for (let i = 0; i < stamps.length; i++) {
+    let open = blobSize.length > 0;
+    for (let b = 0; b < blobSize.length; b++) {
+      if (blobSize[b] < 3) open = false;
+    }
+    const wantNew = open && Math.random() < 0.5;
+    const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, open, relax, cover, sole, blobAt, own, blobSize, nextBlob);
+    if (!placed) return null;
+    if (placed.blob === nextBlob) nextBlob++;
+    blobSize[placed.blob] = (blobSize[placed.blob] || 0) + 1;
+  }
+  return { grid: grid, blobAt: blobAt };
+};
+
+GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, open, relax, cover, sole, blobAt, own, blobSize, nextBlob) {
+  const rows = grid.rows;
+  const cols = grid.cols;
+  const cap = Math.floor(rows * cols * GridBuilder.RED_CAP);
+  const shape = Grid.STAMP_DEFINITIONS[kind];
+  const full = shape ? shape.w * shape.h : 0;
+  const rowAnchors = [];
+  const colAnchors = [];
+  if (shape && shape.h & 1) {
+    for (let r = 0; r < rows; r++) rowAnchors.push(r);
+  } else if (rows > 1) {
+    for (let r = 0; r < rows - 1; r++) rowAnchors.push(r + 0.5);
+  }
+  if (shape && shape.w & 1) {
+    for (let c = 0; c < cols; c++) colAnchors.push(c);
+  } else if (cols > 1) {
+    for (let c = 0; c < cols - 1; c++) colAnchors.push(c + 0.5);
+  }
   const dirs = [
     [1, 0],
     [-1, 0],
     [0, 1],
     [0, -1],
   ];
+  const pools = {
+    attach: { inner: [], edge: [], clipped: [] },
+    free: { inner: [], edge: [], clipped: [] },
+  };
 
-  function shapeOf(kind) {
-    return Grid.STAMP_DEFINITIONS[kind];
-  }
-
-  function cellsOf(hit) {
-    const out = [];
-    for (let dr = 0; dr < hit.h; dr++) {
-      for (let dc = 0; dc < hit.w; dc++) out.push({ r: hit.r + dr, c: hit.c + dc });
-    }
-    return out;
-  }
-
-  function covered(list) {
-    const map = {};
-    for (let i = 0; i < list.length; i++) {
-      const cells = cellsOf(list[i]);
-      for (let k = 0; k < cells.length; k++) map[cells[k].r + "," + cells[k].c] = (map[cells[k].r + "," + cells[k].c] || 0) + 1;
-    }
-    return map;
-  }
-
-  function bounds(map) {
-    let minR = 99;
-    let maxR = -99;
-    let minC = 99;
-    let maxC = -99;
-    let n = 0;
-    for (const key in map) {
-      const bits = key.split(",");
-      const r = parseInt(bits[0], 10);
-      const c = parseInt(bits[1], 10);
-      if (r < minR) minR = r;
-      if (r > maxR) maxR = r;
-      if (c < minC) minC = c;
-      if (c > maxC) maxC = c;
-      n++;
-    }
-    return { minR: minR, maxR: maxR, minC: minC, maxC: maxC, n: n };
-  }
-
-  function blobSizes(list) {
-    const sizes = [];
-    for (let i = 0; i < list.length; i++) {
-      const b = list[i].blob;
-      sizes[b] = (sizes[b] || 0) + 1;
-    }
-    return sizes;
-  }
-
-  function consider(kind, blob, allowSplit) {
-    const shape = shapeOf(kind);
-    if (!shape) return null;
-    const map = covered(placed);
-    const box = bounds(map);
-    const hits = [];
-    for (let i = 0; i < placed.length; i++) {
-      if (placed[i].blob !== blob && !allowSplit) continue;
-      const host = placed[i];
-      const sides = [
-        { r: host.r - shape.h, c: host.c, edge: "h" },
-        { r: host.r + host.h, c: host.c, edge: "h" },
-        { r: host.r, c: host.c - shape.w, edge: "v" },
-        { r: host.r, c: host.c + host.w, edge: "v" },
-      ];
-      for (let s = 0; s < sides.length; s++) {
-        const slide = sides[s].edge === "h" ? host.w - shape.w : host.h - shape.h;
-        const steps = [];
-        if (slide === 0) steps.push(0);
-        else if (slide > 0) {
-          steps.push(0);
-          steps.push(slide);
-          if (slide > 1) steps.push(slide >> 1);
-        } else {
-          steps.push(0);
-          steps.push(slide);
-        }
-        for (let t = 0; t < steps.length; t++) {
-          const hit = { r: sides[s].r, c: sides[s].c, w: shape.w, h: shape.h, blob: blob, overlap: 0, edge: sides[s].edge === "h" ? shape.w : shape.h };
-          if (sides[s].edge === "h") hit.c += steps[t];
-          else hit.r += steps[t];
-          hits.push(hit);
-        }
-      }
-      if (relax || Math.random() < 0.22) {
-        if (host.w === shape.w) {
-          hits.push({ r: host.r - shape.h + 1, c: host.c, w: shape.w, h: shape.h, blob: blob, overlap: 1, edge: shape.w });
-          hits.push({ r: host.r + host.h - 1, c: host.c, w: shape.w, h: shape.h, blob: blob, overlap: 1, edge: shape.w });
-        }
-        if (host.h === shape.h) {
-          hits.push({ r: host.r, c: host.c - shape.w + 1, w: shape.w, h: shape.h, blob: blob, overlap: 1, edge: shape.h });
-          hits.push({ r: host.r, c: host.c + host.w - 1, w: shape.w, h: shape.h, blob: blob, overlap: 1, edge: shape.h });
+  function consider(row, col) {
+    const cells = Grid.footprint(rows, cols, kind, row, col);
+    if (!cells.length) return;
+    let fresh = 0;
+    let overlap = 0;
+    const lost = [];
+    const touched = [];
+    for (let i = 0; i < cells.length; i++) {
+      const r = cells[i].r;
+      const c = cells[i].c;
+      if (cover[r][c] === 0) fresh++;
+      else {
+        overlap++;
+        const blob = blobAt[r][c];
+        if (touched.indexOf(blob) < 0) touched.push(blob);
+        if (cover[r][c] === 1) {
+          const owner = sole[r][c];
+          lost[owner] = (lost[owner] || 0) + 1;
         }
       }
     }
-    let best = null;
-    for (let i = 0; i < hits.length; i++) {
-      const hit = hits[i];
-      const cells = cellsOf(hit);
-      let fresh = 0;
-      let share = 0;
-      let touch = 0;
-      const seen = {};
-      let bad = false;
-      for (let k = 0; k < cells.length; k++) {
-        const key = cells[k].r + "," + cells[k].c;
-        if (seen[key]) {
-          bad = true;
+    for (let i = 0; i < cells.length; i++) {
+      for (let d = 0; d < 4; d++) {
+        const rr = cells[i].r + dirs[d][0];
+        const cc = cells[i].c + dirs[d][1];
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        if (cover[rr][cc] === 0) continue;
+        let inside = false;
+        for (let k = 0; k < cells.length; k++) {
+          if (cells[k].r === rr && cells[k].c === cc) {
+            inside = true;
+            break;
+          }
+        }
+        if (inside) continue;
+        const blob = blobAt[rr][cc];
+        if (touched.indexOf(blob) < 0) touched.push(blob);
+      }
+    }
+    if (fresh < 1) return;
+    if (grid.redCount() + fresh > cap) return;
+    for (let s = 0; s < id; s++) {
+      if (own[s] - (lost[s] || 0) < 1) return;
+    }
+    let seat = "inner";
+    if (cells.length < full) seat = "clipped";
+    else {
+      for (let i = 0; i < cells.length; i++) {
+        const r = cells[i].r;
+        const c = cells[i].c;
+        if (r === 0 || c === 0 || r === rows - 1 || c === cols - 1) {
+          seat = "edge";
           break;
         }
-        seen[key] = 1;
-        if (map[key]) share++;
-        else fresh++;
-      }
-      if (bad || fresh < GridBuilder.MIN_SOLE) continue;
-      if (hit.overlap) {
-        if (share !== hit.w && share !== hit.h) continue;
-        if (share !== cells.length - fresh) continue;
-      } else if (share) continue;
-      for (let k = 0; k < cells.length; k++) {
-        if (map[cells[k].r + "," + cells[k].c]) continue;
-        for (let d = 0; d < 4; d++) {
-          const rr = cells[k].r + dirs[d][0];
-          const cc = cells[k].c + dirs[d][1];
-          if (map[rr + "," + cc] && !seen[rr + "," + cc]) touch++;
-        }
-      }
-      if (!hit.overlap && touch < hit.edge) continue;
-      const next = {};
-      for (const key in map) next[key] = 1;
-      for (let k = 0; k < cells.length; k++) next[cells[k].r + "," + cells[k].c] = 1;
-      const box2 = bounds(next);
-      const area = (box2.maxR - box2.minR + 1) * (box2.maxC - box2.minC + 1);
-      const fill = box2.n / area;
-      if (fill < (relax ? 0.7 : 0.8)) continue;
-      let holes = 0;
-      for (let r = box2.minR; r <= box2.maxR; r++) {
-        for (let c = box2.minC; c <= box2.maxC; c++) {
-          if (next[r + "," + c]) continue;
-          if (r === box2.minR || r === box2.maxR || c === box2.minC || c === box2.maxC) continue;
-          holes++;
-        }
-      }
-      if (holes > 2) continue;
-      let score = fill * 20 + fresh - share * 0.5 - holes * 3 + Math.random();
-      if (hit.overlap) score -= 4;
-      if (!best || score > best.score) best = { hit: hit, score: score };
-    }
-    return best ? best.hit : null;
-  }
-
-  const seed = pending.splice(pending.reduce(function (best, item, index) {
-    const shape = shapeOf(item.kind);
-    const area = shape ? shape.w * shape.h : 0;
-    return area > best.area ? { index: index, area: area } : best;
-  }, { index: 0, area: -1 }).index, 1)[0];
-  const seedShape = shapeOf(seed.kind);
-  if (!seedShape) return null;
-  placed.push({ id: seed.id, kind: seed.kind, r: 0, c: 0, w: seedShape.w, h: seedShape.h, blob: 0 });
-  let nextBlob = 1;
-
-  while (pending.length) {
-    const sizes = blobSizes(placed);
-    let infant = -1;
-    let mature = false;
-    for (let b = 0; b < sizes.length; b++) {
-      if (!sizes[b]) continue;
-      if (sizes[b] < 3) infant = b;
-      if (sizes[b] >= 3) mature = true;
-    }
-    const target = infant >= 0 ? infant : 0;
-    const allowSplit = infant < 0 && mature && pending.length >= 3;
-    let pickAt = -1;
-    let pick = null;
-    for (let p = 0; p < pending.length; p++) {
-      const hit = consider(pending[p].kind, target, false);
-      if (hit && (!pick || hit.overlap < pick.overlap)) {
-        pick = hit;
-        pickAt = p;
       }
     }
-    if (!pick && allowSplit) {
-      const kind = pending[0].kind;
-      const shape = shapeOf(kind);
-      const box = bounds(covered(placed));
-      pick = { r: box.maxR + 2, c: box.minC, w: shape.w, h: shape.h, blob: nextBlob, overlap: 0 };
-      pickAt = 0;
-      nextBlob++;
+    const hit = { cells: cells, fresh: fresh };
+    if (!touched.length) pools.free[seat].push(hit);
+    else if (touched.length === 1 && (overlap > 0 || true)) pools.attach[seat].push(hit);
+  }
+
+  if (!rowAnchors.length || !colAnchors.length) return null;
+  for (let t = 0; t < 180; t++) consider(rowAnchors[(Math.random() * rowAnchors.length) | 0], colAnchors[(Math.random() * colAnchors.length) | 0]);
+  let bag = GridBuilder.pickBag(pools, first, openSeat, wantNew, open, relax);
+  if (!bag || !bag.length) {
+    pools.attach = { inner: [], edge: [], clipped: [] };
+    pools.free = { inner: [], edge: [], clipped: [] };
+    for (let ri = 0; ri < rowAnchors.length; ri++) {
+      for (let ci = 0; ci < colAnchors.length; ci++) consider(rowAnchors[ri], colAnchors[ci]);
     }
-    if (!pick || pickAt < 0) return null;
-    pick.id = pending[pickAt].id;
-    pick.kind = pending[pickAt].kind;
-    placed.push(pick);
-    pending.splice(pickAt, 1);
+    bag = GridBuilder.pickBag(pools, first, openSeat, wantNew, open, relax);
   }
-
-  const map = covered(placed);
-  const cells = [];
-  for (const key in map) {
-    const bits = key.split(",");
-    cells.push({ r: parseInt(bits[0], 10), c: parseInt(bits[1], 10) });
+  if (!bag || !bag.length) return null;
+  const pick = bag[(Math.random() * bag.length) | 0];
+  let blob = nextBlob;
+  for (let i = 0; i < pick.cells.length; i++) {
+    const r = pick.cells[i].r;
+    const c = pick.cells[i].c;
+    if (cover[r][c] > 0 && blobAt[r][c] >= 0) blob = blobAt[r][c];
   }
-  return { cells: cells, placed: placed };
-};
-
-GridBuilder.seat = function (pack, clip, attempt) {
-  if (!pack || !pack.cells || !pack.cells.length) return null;
-  let minR = 99;
-  let maxR = -99;
-  let minC = 99;
-  let maxC = -99;
-  for (let i = 0; i < pack.cells.length; i++) {
-    const cell = pack.cells[i];
-    if (cell.r < minR) minR = cell.r;
-    if (cell.r > maxR) maxR = cell.r;
-    if (cell.c < minC) minC = cell.c;
-    if (cell.c > maxC) maxC = cell.c;
-  }
-  const packH = maxR - minR + 1;
-  const packW = maxC - minC + 1;
-  let margin = packH >= 7 || packW >= 7 ? 1 : 1 + ((attempt | 0) & 1);
-  let cutT = 0;
-  let cutB = 0;
-  let cutL = 0;
-  let cutR = 0;
-  if (clip) {
-    const roll = (attempt | 0) % 4;
-    if (roll === 0) cutT = margin + 1;
-    else if (roll === 1) cutB = margin + 1;
-    else if (roll === 2) cutL = margin + 1;
-    else cutR = margin + 1;
-    if (clip > 1 && roll < 2) cutL = margin + 1;
-    if (clip > 1 && roll >= 2) cutT = margin + 1;
-  }
-  let rows = packH + margin * 2 - cutT - cutB;
-  let cols = packW + margin * 2 - cutL - cutR;
-  let originR = margin - cutT - minR;
-  let originC = margin - cutL - minC;
-  if (rows < 5) {
-    const need = 5 - rows;
-    if (cutB && !cutT) originR += need;
-    rows += need;
-  }
-  if (cols < 5) {
-    const need = 5 - cols;
-    if (cutR && !cutL) originC += need;
-    cols += need;
-  }
-  if (rows > 16) rows = 16;
-  if (cols > 13) cols = 13;
-  const grid = new Grid(rows, cols);
-  let painted = 0;
-  for (let i = 0; i < pack.cells.length; i++) {
-    const r = pack.cells[i].r + originR;
-    const c = pack.cells[i].c + originC;
+  own[id] = 0;
+  for (let i = 0; i < pick.cells.length; i++) {
+    const r = pick.cells[i].r;
+    const c = pick.cells[i].c;
     const cell = grid.at(r, c);
-    if (!cell) continue;
-    cell.setType("horde");
-    painted++;
+    if (cover[r][c] === 0) {
+      cover[r][c] = 1;
+      sole[r][c] = id;
+      blobAt[r][c] = blob;
+      own[id]++;
+      if (!cell.is("horde")) cell.setType("horde");
+    } else if (cover[r][c] === 1) {
+      own[sole[r][c]]--;
+      sole[r][c] = -1;
+      cover[r][c] = 2;
+    } else cover[r][c]++;
   }
-  if (painted < GridBuilder.MIN_SOLE) return null;
-  return grid;
+  if (own[id] < 1) return null;
+  return { blob: blob };
 };
 
-GridBuilder.paintCities = function (grid, count) {
+GridBuilder.pickBag = function (pools, first, openSeat, wantNew, open, relax) {
+  function weighted(group) {
+    const seats = [
+      ["inner", 2],
+      ["edge", 2],
+      ["clipped", 2],
+    ];
+    let total = 0;
+    const bag = [];
+    for (let i = 0; i < seats.length; i++) {
+      if (!group[seats[i][0]].length) continue;
+      total += seats[i][1];
+      bag.push(seats[i]);
+    }
+    if (!total) return null;
+    let roll = Math.random() * total;
+    for (let i = 0; i < bag.length; i++) {
+      roll -= bag[i][1];
+      if (roll < 0) return group[bag[i][0]];
+    }
+    return group[bag[bag.length - 1][0]];
+  }
+  if (first) {
+    if (openSeat === "edge" && pools.free.edge.length) return pools.free.edge;
+    if (pools.free.inner.length) return pools.free.inner;
+    if (relax && pools.free.edge.length) return pools.free.edge;
+    return null;
+  }
+  if (wantNew) {
+    if (pools.free.edge.length) return pools.free.edge;
+    if (relax && pools.free.inner.length) return pools.free.inner;
+  }
+  const attached = weighted(pools.attach);
+  if (attached) return attached;
+  if (open && pools.free.edge.length) return pools.free.edge;
+  return null;
+};
+
+GridBuilder.paintCities = function (grid, count, blobAt) {
   if (count < 1) return;
   const rows = grid.rows;
   const cols = grid.cols;
@@ -308,102 +246,76 @@ GridBuilder.paintCities = function (grid, count) {
     [0, 1],
     [0, -1],
   ];
-  const crooks = [];
-  const grass = [];
+  const taken = [];
+  function spaced(r, c) {
+    for (let i = 0; i < taken.length; i++) {
+      let dr = r - taken[i].r;
+      let dc = c - taken[i].c;
+      if (dr < 0) dr = -dr;
+      if (dc < 0) dc = -dc;
+      if ((dr > dc ? dr : dc) < 2) return false;
+    }
+    return true;
+  }
+  function redNeighbors(r, c) {
+    let n = 0;
+    for (let d = 0; d < 4; d++) {
+      const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
+      if (cell && cell.is("horde")) n++;
+    }
+    return n;
+  }
+  const pocket = [];
+  const bay = [];
+  const tip = [];
+  const halo = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (!grid.at(r, c).is("grass")) continue;
+      const blobs = [];
       let redN = 0;
+      let tipTouch = false;
       for (let d = 0; d < 4; d++) {
-        const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
-        if (cell && cell.is("horde")) redN++;
+        const rr = r + dirs[d][0];
+        const cc = c + dirs[d][1];
+        const cell = grid.at(rr, cc);
+        if (!cell || !cell.is("horde")) continue;
+        redN++;
+        if (redNeighbors(rr, cc) <= 1) tipTouch = true;
+        if (blobAt) {
+          const blob = blobAt[rr][cc];
+          if (blob >= 0 && blobs.indexOf(blob) < 0) blobs.push(blob);
+        }
       }
+      if (!redN) continue;
       const spot = { r: r, c: c };
-      if (redN >= 3) crooks.push(spot);
-      grass.push(spot);
+      if (redN >= 4) pocket.push(spot);
+      else if (blobs.length > 1) bay.push(spot);
+      else if (redN >= 3) bay.push(spot);
+      else if (tipTouch) tip.push(spot);
+      else halo.push(spot);
     }
   }
-  GridBuilder.shuffle(crooks);
-  GridBuilder.shuffle(grass);
+  GridBuilder.shuffle(pocket);
+  GridBuilder.shuffle(bay);
+  GridBuilder.shuffle(tip);
+  GridBuilder.shuffle(halo);
+  const struct = pocket.concat(bay, tip);
+  const structN = (count + 1) >> 1;
   let placed = 0;
-  const crookCap = Math.min(count, Math.max(1, Math.floor(count / 4)));
-  for (let i = 0; i < crooks.length && placed < crookCap; i++) {
-    grid.at(crooks[i].r, crooks[i].c).setType("city");
+  for (let i = 0; i < struct.length && placed < structN; i++) {
+    if (!spaced(struct[i].r, struct[i].c)) continue;
+    grid.at(struct[i].r, struct[i].c).setType("city");
+    taken.push(struct[i]);
     placed++;
   }
-  const scatterCap = placed + Math.max(1, Math.floor(count / 3));
-  for (let i = 0; i < grass.length && placed < scatterCap && placed < count; i++) {
-    if (!grid.at(grass[i].r, grass[i].c).is("grass")) continue;
-    let beside = false;
-    for (let d = 0; d < 4; d++) {
-      const cell = grid.at(grass[i].r + dirs[d][0], grass[i].c + dirs[d][1]);
-      if (cell && cell.is("city")) beside = true;
-    }
-    if (beside) continue;
-    grid.at(grass[i].r, grass[i].c).setType("city");
+  const rest = halo.concat(struct);
+  for (let i = 0; i < rest.length && placed < count; i++) {
+    if (!grid.at(rest[i].r, rest[i].c).is("grass")) continue;
+    if (!spaced(rest[i].r, rest[i].c)) continue;
+    grid.at(rest[i].r, rest[i].c).setType("city");
+    taken.push(rest[i]);
     placed++;
-  }
-  const closed = [];
-  for (let r = 0; r < rows; r++) closed.push([]);
-  while (placed < count) {
-    const seeds = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (!grid.at(r, c).is("city") || closed[r][c]) continue;
-        for (let d = 0; d < 4; d++) {
-          const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
-          if (cell && cell.is("grass")) {
-            seeds.push({ r: r, c: c });
-            break;
-          }
-        }
-      }
-    }
-    if (!seeds.length) {
-      let dumped = false;
-      for (let i = 0; i < grass.length; i++) {
-        if (!grid.at(grass[i].r, grass[i].c).is("grass")) continue;
-        grid.at(grass[i].r, grass[i].c).setType("city");
-        placed++;
-        dumped = true;
-        break;
-      }
-      if (!dumped) return;
-      continue;
-    }
-    const seed = seeds[(Math.random() * seeds.length) | 0];
-    const clump = [{ r: seed.r, c: seed.c }];
-    const room = 1 + ((Math.random() * 2) | 0);
-    let grew = 0;
-    while (grew < room && placed < count) {
-      const next = [];
-      for (let i = 0; i < clump.length; i++) {
-        for (let d = 0; d < 4; d++) {
-          const rr = clump[i].r + dirs[d][0];
-          const cc = clump[i].c + dirs[d][1];
-          const cell = grid.at(rr, cc);
-          if (cell && cell.is("grass")) next.push({ r: rr, c: cc });
-        }
-      }
-      if (!next.length) break;
-      const add = next[(Math.random() * next.length) | 0];
-      grid.at(add.r, add.c).setType("city");
-      clump.push(add);
-      placed++;
-      grew++;
-    }
-    for (let i = 0; i < clump.length; i++) closed[clump[i].r][clump[i].c] = 1;
-    if (!grew) {
-      let dumped = false;
-      for (let i = 0; i < grass.length; i++) {
-        if (!grid.at(grass[i].r, grass[i].c).is("grass")) continue;
-        grid.at(grass[i].r, grass[i].c).setType("city");
-        placed++;
-        dumped = true;
-        break;
-      }
-      if (!dumped) return;
-    }
   }
 };
 

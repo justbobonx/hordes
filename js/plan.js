@@ -3,7 +3,7 @@
 function Plan() {}
 
 Plan.blank = function () {
-  return { wave: 1, stamps: ["33"], cities: 3, clip: 0 };
+  return { wave: 1, rows: 6, cols: 6, stamps: ["33"], cities: 0 };
 };
 
 Plan.copy = function (plan) {
@@ -14,16 +14,26 @@ Plan.copy = function (plan) {
     if (Grid.STAMP_DEFINITIONS[src[i]]) stamps.push(src[i]);
   }
   if (!stamps.length) stamps.push("33");
+  let rows = plan.rows | 0;
+  let cols = plan.cols | 0;
+  if (!rows && plan.size) rows = plan.size | 0;
+  if (!cols && plan.size) cols = plan.size | 0;
+  if (rows < 5) rows = 5;
+  if (cols < 5) cols = 5;
+  if (rows > 16) rows = 16;
+  if (cols > 13) cols = 13;
   let cities = plan.cities | 0;
   if (cities < 0) cities = 0;
-  if (cities > 14) cities = 14;
+  if (cities > 8) cities = 8;
   const wave = plan.wave | 0 || 1;
-  const clip = plan.clip | 0;
+  const openSeat = plan.open === "edge" ? "edge" : "inner";
   return {
     wave: wave,
+    rows: rows,
+    cols: cols,
     stamps: stamps,
     cities: cities,
-    clip: clip > 2 ? 2 : clip,
+    open: openSeat,
   };
 };
 
@@ -58,8 +68,19 @@ Plan.fromQuery = function (search) {
     }
   }
   const parts = raw.split(",");
-  const stamps = parts[0] ? parts[0].split(/[+ ]+/) : ["33"];
-  const cities = parts.length > 1 ? parseInt(parts[1], 10) : 3;
-  const clip = parts.length > 2 ? parseInt(parts[2], 10) : 0;
-  return Plan.copy({ wave: 0, stamps: stamps, cities: cities, clip: clip });
+  const head = parts[0] || "";
+  let rows = 0;
+  let cols = 0;
+  if (head.indexOf("x") >= 0) {
+    const dims = head.split("x");
+    cols = parseInt(dims[0], 10);
+    rows = parseInt(dims[1], 10);
+  } else {
+    cols = parseInt(head, 10);
+    rows = cols;
+  }
+  if (!cols || !rows) return null;
+  const stamps = parts[1] ? parts[1].split(/[+ ]+/) : ["33"];
+  const cities = parts.length > 2 ? parseInt(parts[2], 10) : 2;
+  return Plan.copy({ wave: 0, rows: rows, cols: cols, stamps: stamps, cities: cities });
 };
