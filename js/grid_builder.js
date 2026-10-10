@@ -1,5 +1,17 @@
 /** Drop stamps, then dress grass with towns. The blob stays red. */
 
+const THIN_CELL_WEIGHTS = {
+  0: 0,
+  1: 0.1,
+  2: 1.5,
+  3: 1.2,
+  4: 1.0  
+};
+
+const CENTERED_DEFAULT = 0.4;
+const TIGHT_DEFAULT = 0.6;
+const THIN_DEFAULT = 0.25;
+
 function GridBuilder() {}
 
 GridBuilder.build = function (plan) {
@@ -11,19 +23,19 @@ GridBuilder.build = function (plan) {
   let centered = plan.centered;
   if (centered === undefined || centered === null || centered === "") centered = 0.5;
   centered = +centered;
-  if (centered !== centered) centered = 0.5;
+  if (centered !== centered) centered = CENTERED_DEFAULT;
   if (centered < 0) centered = 0;
   if (centered > 1) centered = 1;
   let tight = plan.tight;
   if (tight === undefined || tight === null || tight === "") tight = 0.5;
   tight = +tight;
-  if (tight !== tight) tight = 0.5;
+  if (tight !== tight) tight = TIGHT_DEFAULT;
   if (tight < 0) tight = 0;
   if (tight > 1) tight = 1;
   let thin = plan.thin;
   if (thin === undefined || thin === null || thin === "") thin = 0.2;
   thin = +thin;
-  if (thin !== thin) thin = 0.2;
+  if (thin !== thin) thin = THIN_DEFAULT;
   if (thin < 0) thin = 0;
   if (thin > 1) thin = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
@@ -114,14 +126,7 @@ GridBuilder.thin = function (grid, cover, sole, own, stampKeep, thin) {
       if (grid.at(rr, cc).is("grass")) n++;
     }
     return n;
-  }
-  function weightOf(n) {
-    if (n === 2) return 1.5;
-    if (n === 1) return 0.75;
-    if (n === 3) return 0.5;
-    if (n >= 4) return 0.25;
-    return 0;
-  }
+ }
   const remaining = [];
   for (let s = 0; s < own.length; s++) remaining[s] = Math.max(0, (own[s] || 0) - (stampKeep[s] || 0));
   let initial = 0;
@@ -148,7 +153,7 @@ GridBuilder.thin = function (grid, cover, sole, own, stampKeep, thin) {
         if (cover[r][c] >= 2) allowed = true;
         else if (cover[r][c] === 1 && remaining[sole[r][c]] > 0) allowed = true;
         if (!allowed) continue;
-        const w = weightOf(g);
+        const w = THIN_CELL_WEIGHTS[g];
         if (w <= 0) continue;
         eligible.push({ r: r, c: c, w: w });
         total += w;
