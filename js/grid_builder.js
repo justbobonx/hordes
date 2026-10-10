@@ -20,6 +20,7 @@ GridBuilder.build = function (plan) {
   if (tight < 0) tight = 0;
   if (tight > 1) tight = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
+    GridBuilder.shuffle(stamps);
     const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered);
     if (!built) continue;
     GridBuilder.paintCities(built.grid);
