@@ -103,7 +103,7 @@ Ui.prototype.hudPad = function () {
     return h > 0 ? h : fallback;
   }
   return {
-    top: Math.max(78, barHeight(this.elHud, 78)),
+    top: Math.max(90, barHeight(this.elHud, 90)),
     bot: Math.max(56, barHeight(this.elHudBottom, 56)),
   };
 };
@@ -123,11 +123,11 @@ Ui.prototype.paintTray = function (queue) {
   for (let i = list.length - 1; i >= 0; i--) {
     const live = i === 0;
     const kind = list[i];
-    const shape = Grid.STAMP_DEFINITIONS[kind] || Grid.STAMP_DEFINITIONS["33"];
+    const shape = Grid.STAMP_DEFINITIONS[kind];
     const stamp = document.createElement("div");
     stamp.className = "stamp" + (live ? " live" : "");
     stamp.title = Plan.label(kind);
-    stamp.style.gridTemplateColumns = "repeat(" + shape.w + ", 7px)";
+    stamp.style.gridTemplateColumns = "repeat(" + shape.w + ", 9px)";
     for (let k = 0; k < shape.w * shape.h; k++) {
       stamp.appendChild(document.createElement("i"));
     }

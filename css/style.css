@@ -77,33 +77,29 @@ button, a { font-family: inherit; }
   align-items: flex-end;
   justify-content: center;
   width: 100%;
-  min-height: 46px;
+  min-height: 58px;
 }
 
 .stamp {
   display: grid;
   gap: 1px;
   padding: 3px;
-  background: #1c2418;
-  border: 2px solid #3a4632;
-  opacity: 0.55;
+  background: #1c2418;  
+  opacity: 0.9;
 }
 
 .stamp.live {
-  opacity: 1;
+  opacity: 1;  
+  border: 2px solid #3a4632;
   border-color: #f2e27a;
 }
 
 .stamp i {
   display: block;
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   background: #e07a2f;
 }
-
-.stamp-3 { grid-template-columns: repeat(3, 7px); }
-.stamp-5 { grid-template-columns: repeat(5, 7px); }
-.stamp-col { grid-template-columns: 7px; }
 
 #lost-flag {
   color: #e15a52;

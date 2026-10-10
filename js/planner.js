@@ -10,13 +10,6 @@ Planner.INTRO = {
   5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner" },
 };
 
-Planner.bias = function () {
-  const roll = Math.random();
-  if (roll < 1 / 3) return 0.2;
-  if (roll < 2 / 3) return 0.5;
-  return 0.85;
-};
-
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
   const scripted = Planner.INTRO[w];
@@ -85,8 +78,8 @@ Planner.offer = function (wave) {
       cols: cols,
       stamps: stamps,
       open: "inner",
-      centered: Planner.bias(),
-      tight: Planner.bias(),
+      centered: (Math.random()+Math.random())/2,
+      tight: (Math.random()+Math.random())/2,
     }),
     locked: false,
   }];
