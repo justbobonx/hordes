@@ -94,8 +94,10 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   const rows = grid.rows;
   const cols = grid.cols;
   const shape = Grid.STAMP_DEFINITIONS[kind];
-  const full = shape ? shape.w * shape.h : 0;
-  const keep = shape ? full - Math.floor((shape.w + shape.h) / 2) : 0;
+  const full = shape.w * shape.h;
+  //const keep = full - Math.floor((shape.w + shape.h) / 2);
+  const keep = full - Math.min(shape.w,shape.h);
+  //const keep = full;
   const rowAnchors = [];
   const colAnchors = [];
   if (shape && shape.h & 1) {

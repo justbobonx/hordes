@@ -23,7 +23,7 @@ function Game() {
   this.preview = null;
   this.origin = { x: 0, y: 0, cell: 32, rows: 6, cols: 6 };
   this.bound = false;
-  this.propMs = 120;
+  this.propMs = 60;
   this.actions = [];
   this.actionTimer = 0;
   this.stampHeld = false;
