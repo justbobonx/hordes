@@ -20,10 +20,17 @@ GridBuilder.build = function (plan) {
   if (tight !== tight) tight = 0.5;
   if (tight < 0) tight = 0;
   if (tight > 1) tight = 1;
+  let thin = plan.thin;
+  if (thin === undefined || thin === null || thin === "") thin = 0.2;
+  thin = +thin;
+  if (thin !== thin) thin = 0.2;
+  if (thin < 0) thin = 0;
+  if (thin > 1) thin = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
     const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered);
     if (!built) continue;
     GridBuilder.paintCities(built.grid);
+    GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.stampKeep, thin);
     built.grid.anchors = built.anchors || [];
     built.grid.dress();
     return built.grid;
@@ -41,9 +48,11 @@ GridBuilder.build = function (plan) {
     for (let i = 0; i < seed.length; i++) grid.at(seed[i].r, seed[i].c).setType("horde");
     grid.anchors = [{ row: midR, col: midC }];
   } else {
+    GridBuilder.paintCities(grid);
+    GridBuilder.thin(grid, built.cover, built.sole, built.own, built.stampKeep, thin);
     grid.anchors = built.anchors || [];
   }
-  GridBuilder.paintCities(grid);
+  if (!built) GridBuilder.paintCities(grid);
   grid.dress();
   return grid;
 };
@@ -88,7 +97,76 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered) {
     anchors.push({ row: placed.row, col: placed.col });
     if (placed.spawned) nextBlob++;
   }
-  return { grid: grid, blobAt: blobAt, anchors: anchors };
+  return { grid: grid, blobAt: blobAt, anchors: anchors, cover: cover, sole: sole, own: own, stampKeep: stampKeep };
+};
+
+GridBuilder.thin = function (grid, cover, sole, own, stampKeep, thin) {
+  if (!thin || thin <= 0 || !cover || !sole || !own || !stampKeep) return;
+  const rows = grid.rows;
+  const cols = grid.cols;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  function grassCount(r, c) {
+    let n = 0;
+    for (let d = 0; d < 4; d++) {
+      const rr = r + dirs[d][0];
+      const cc = c + dirs[d][1];
+      if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+      if (grid.at(rr, cc).is("grass")) n++;
+    }
+    return n;
+  }
+  function weightOf(n) {
+    if (n === 2) return 1.5;
+    if (n === 1) return 0.75;
+    if (n === 3) return 0.5;
+    if (n >= 4) return 0.25;
+    return 0;
+  }
+  const remaining = [];
+  for (let s = 0; s < own.length; s++) remaining[s] = Math.max(0, (own[s] || 0) - (stampKeep[s] || 0));
+  let initial = 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!grid.at(r, c).is("horde")) continue;
+      const g = grassCount(r, c);
+      if (g < 1) continue;
+      if (cover[r][c] >= 2) initial++;
+      else if (cover[r][c] === 1 && remaining[sole[r][c]] > 0) initial++;
+    }
+  }
+  const target = Math.round(initial * thin * 0.9);
+  if (target < 1) return;
+  for (let removed = 0; removed < target; removed++) {
+    const eligible = [];
+    let total = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!grid.at(r, c).is("horde")) continue;
+        const g = grassCount(r, c);
+        if (g < 1) continue;
+        let allowed = false;
+        if (cover[r][c] >= 2) allowed = true;
+        else if (cover[r][c] === 1 && remaining[sole[r][c]] > 0) allowed = true;
+        if (!allowed) continue;
+        const w = weightOf(g);
+        if (w <= 0) continue;
+        eligible.push({ r: r, c: c, w: w });
+        total += w;
+      }
+    }
+    if (!eligible.length || total <= 0) break;
+    let roll = Math.random() * total;
+    let pick = eligible[eligible.length - 1];
+    for (let i = 0; i < eligible.length; i++) {
+      roll -= eligible[i].w;
+      if (roll <= 0) {
+        pick = eligible[i];
+        break;
+      }
+    }
+    grid.at(pick.r, pick.c).setType("grass");
+    if (cover[pick.r][pick.c] === 1) remaining[sole[pick.r][pick.c]]--;
+  }
 };
 
 GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob) {

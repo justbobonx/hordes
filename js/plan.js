@@ -38,6 +38,12 @@ Plan.copy = function (plan) {
   if (tight !== tight) tight = 0.5;
   if (tight < 0) tight = 0;
   if (tight > 1) tight = 1;
+  let thin = plan.thin;
+  if (thin === undefined || thin === null || thin === "") thin = 0.2;
+  thin = +thin;
+  if (thin !== thin) thin = 0.2;
+  if (thin < 0) thin = 0;
+  if (thin > 1) thin = 1;
   return {
     wave: wave,
     rows: rows,
@@ -47,6 +53,7 @@ Plan.copy = function (plan) {
     open: openSeat,
     centered: centered,
     tight: tight,
+    thin: thin,
   };
 };
 
