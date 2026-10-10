@@ -26,28 +26,21 @@ Planner.offer = function (wave) {
   }
   let count = base + ((Math.random() * 3) | 0) - 1;
   if (count < 1) count = 1;
-  const openIds = [];
-  let total = 0;
+  const pool = [];
   const ids = Object.keys(Grid.STAMP_DEFINITIONS);
   for (let i = 0; i < ids.length; i++) {
     const piece = Grid.STAMP_DEFINITIONS[ids[i]];
     if (piece.minlevel > w) continue;
-    openIds.push(ids[i]);
-    total += piece.p;
+    for (let k = 0; k < piece.p; k++) pool.push(ids[i]);
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const tmp = pool[i];
+    pool[i] = pool[j];
+    pool[j] = tmp;
   }
   const stamps = [];
-  for (let n = 0; n < count; n++) {
-    let roll = Math.random() * total;
-    let pick = openIds[openIds.length - 1];
-    for (let i = 0; i < openIds.length; i++) {
-      roll -= Grid.STAMP_DEFINITIONS[openIds[i]].p;
-      if (roll < 0) {
-        pick = openIds[i];
-        break;
-      }
-    }
-    stamps.push(pick);
-  }
+  for (let n = 0; n < count && pool.length; n++) stamps.push(pool[n]);
   let cells = 0;
   let maxW = 1;
   let maxH = 1;
@@ -77,7 +70,7 @@ Planner.offer = function (wave) {
       rows: rows,
       cols: cols,
       stamps: stamps,
-      open: "inner",
+      open: "any",
       centered: (Math.random()+Math.random())/2,
       tight: (Math.random()+Math.random())/2,
     }),

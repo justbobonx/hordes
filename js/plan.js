@@ -24,7 +24,8 @@ Plan.copy = function (plan) {
   if (cities < 0) cities = 0;
   if (cities > 8) cities = 8;
   const wave = plan.wave | 0 || 1;
-  const openSeat = plan.open === "edge" || plan.open === "clipped" ? plan.open : "inner";
+  let openSeat = plan.open;
+  if (openSeat !== "edge" && openSeat !== "clipped" && openSeat !== "inner" && openSeat !== "any") openSeat = "any";
   let centered = plan.centered;
   if (centered === undefined || centered === null || centered === "") centered = 0.5;
   centered = +centered;

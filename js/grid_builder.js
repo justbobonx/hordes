@@ -6,7 +6,8 @@ GridBuilder.build = function (plan) {
   const rows = plan.rows | 0;
   const cols = plan.cols | 0;
   const stamps = plan.stamps && plan.stamps.length ? plan.stamps.slice() : ["33"];
-  const openSeat = plan.open === "edge" || plan.open === "clipped" ? plan.open : "inner";
+  let openSeat = plan.open;
+  if (openSeat !== "edge" && openSeat !== "clipped" && openSeat !== "inner" && openSeat !== "any") openSeat = "any";
   let centered = plan.centered;
   if (centered === undefined || centered === null || centered === "") centered = 0.5;
   centered = +centered;
@@ -194,7 +195,11 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       }
       if (openSeat === "clipped") {
         if (cells.length >= full) return;
-      } else if (openSeat === "edge" ? !edge : edge) return;
+      } else if (openSeat === "edge") {
+        if (!edge) return;
+      } else if (openSeat === "inner") {
+        if (edge) return;
+      }
       legal.push({ cells: cells, hits: [], join: nextBlob, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
       return;
     }

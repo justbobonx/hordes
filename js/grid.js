@@ -23,7 +23,7 @@ Grid.STAMP_DEFINITIONS = {
   "54": { w: 5, h: 4, p: 2, minlevel: 7 },
   "15": { w: 1, h: 5, p: 1, minlevel: 8 },
   "51": { w: 5, h: 1, p: 1, minlevel: 8 },
-  "22": { w: 3, h: 3, p: 1, minlevel: 8 },
+  "22": { w: 2, h: 2, p: 1, minlevel: 8 },
 };
 
 Grid.footprint = function (rows, cols, kind, row, col) {
