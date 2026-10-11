@@ -27,6 +27,7 @@ function Game() {
   this.actions = [];
   this.actionTimer = 0;
   this.stampHeld = false;
+  this.sprites = null;
 }
 
 Game.prototype.boot = function () {
@@ -39,11 +40,12 @@ Game.prototype.boot = function () {
   this.testPlan = Plan.fromQuery(location.search);
   this.bind();
   this.layout();
+  const self = this;
+  this.sprites = SpriteBank.defaults(function () { self.paint(); });
   const board = Save.readBoard();
   if (board && board.cells) this.restore(board);
   else this.ui.showStart();
   this.paint();
-  const self = this;
   window.addEventListener("resize", function () {
     self.layout();
     self.paint();
@@ -622,6 +624,7 @@ Game.prototype.layout = function () {
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.style.width = w + "px";
   canvas.style.height = h + "px";
+  canvas.style.imageRendering = "pixelated";
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
   this.ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -662,17 +665,17 @@ Game.prototype.drawBoard = function (ctx) {
   const o = this.origin;
   const rows = this.grid.rows;
   const cols = this.grid.cols;
-  const gap = Math.max(1, o.cell * 0.06);
+  const gap = Math.max(1, o.cell * 0.03);
   ctx.fillStyle = "#10140e";
   ctx.fillRect(o.x - gap, o.y - gap, o.cell * cols + gap * 2, o.cell * rows + gap * 2);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      this.grid.at(r, c).draw(ctx, o.x + c * o.cell, o.y + r * o.cell, o.cell);
+      this.grid.at(r, c).draw(ctx, this.sprites, o.x + c * o.cell, o.y + r * o.cell, o.cell);
     }
   }
   ctx.strokeStyle = "#f2e27a";
   ctx.lineWidth = Math.max(2, o.cell * 0.07);
-  const inset = Math.max(2, o.cell * 0.1);
+  const inset = Math.max(2, o.cell * 0.05);
   for (let a = 0; a < this.actions.length; a++) {
     const action = this.actions[a];
     if (action.type !== "wave") continue;
@@ -739,3 +742,4 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+

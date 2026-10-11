@@ -1,18 +1,17 @@
 /** Cell data and draw. */
 
 const CELL_TYPES = {
-  grass: { fill: "#3f8f45", mark: null },
-  scorched: { fill: "#1c5a28", mark: null },
-  city: { fill: "#2a62d0", mark: null },
-  horde: { fill: "#c4392f", mark: null },
-  cleared: { fill: "#3f8f45", mark: "#c4392f" },
-  ruined: { fill: "#8a8a8a", mark: "#2a2a2a" },
+  grass: { fill: "#3f8f45" },
+  scorched: { fill: "#1c5a28" },
+  city: { fill: "#2a62d0" },
+  horde: { fill: "#c4392f" },
+  cleared: { fill: "#3f8f45" },
+  ruined: { fill: "#8a8a8a" },
 };
 
 function Cell(type) {
   this.type = type || "grass";
   this.fill = CELL_TYPES.grass.fill;
-  this.mark = null;
   this.hint = false;
   this.dress();
 }
@@ -29,32 +28,16 @@ Cell.prototype.setType = function (name) {
 Cell.prototype.dress = function () {
   const look = CELL_TYPES[this.type] || CELL_TYPES.grass;
   this.fill = look.fill;
-  this.mark = look.mark;
 };
 
-Cell.prototype.draw = function (ctx, x, y, size) {
+Cell.prototype.draw = function (ctx, sprites, x, y, size) {
   const inset = Math.max(1, size * 0.06);
+  const ix = x + inset;
+  const iy = y + inset;
+  const is = size - inset * 2;
   ctx.fillStyle = this.fill;
-  ctx.fillRect(x + inset, y + inset, size - inset * 2, size - inset * 2);
-  const pad = size * 0.28;
-  ctx.lineWidth = Math.max(2, size * 0.08);
-  ctx.lineCap = "square";
-  if (this.mark) {
-    ctx.strokeStyle = this.mark;
-    ctx.beginPath();
-    ctx.moveTo(x + pad, y + pad);
-    ctx.lineTo(x + size - pad, y + size - pad);
-    ctx.moveTo(x + size - pad, y + pad);
-    ctx.lineTo(x + pad, y + size - pad);
-    ctx.stroke();
-  }
-  if (!this.hint) return;
-  const hintPad = size * 0.22;
-  ctx.strokeStyle = "#e07a2f";
-  ctx.beginPath();
-  ctx.moveTo(x + hintPad, y + hintPad);
-  ctx.lineTo(x + size - hintPad, y + size - hintPad);
-  ctx.moveTo(x + size - hintPad, y + hintPad);
-  ctx.lineTo(x + hintPad, y + size - hintPad);
-  ctx.stroke();
+  ctx.fillRect(ix, iy, is, is);
+  const id = this.hint && this.type === "cleared" ? "cleared_hint" : this.type;
+  const spr = sprites && sprites.get(id);
+  if (spr) spr.draw(ctx, ix, iy, is);
 };
