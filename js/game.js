@@ -556,7 +556,7 @@ Game.prototype.onDown = function (e) {
   if (!hit) return;
   this.clearHold();
   this.hold = { pointerId: e.pointerId };
-  this.preview = { row: hit.row, col: hit.col };
+  this.preview = { row: hit.row, col: hit.col, x: hit.x, y: hit.y };
   this.paint();
   try {
     this.ui.canvas.setPointerCapture(e.pointerId);
@@ -567,8 +567,7 @@ Game.prototype.onMove = function (e) {
   if (!this.hold || e.pointerId !== this.hold.pointerId) return;
   const hit = this.aim(e);
   if (!hit) return;
-  if (this.preview && hit.row === this.preview.row && hit.col === this.preview.col) return;
-  this.preview = { row: hit.row, col: hit.col };
+  this.preview = { row: hit.row, col: hit.col, x: hit.x, y: hit.y };
   this.paint();
 };
 
@@ -611,9 +610,11 @@ Game.prototype.aim = function (e) {
     return line - 0.5;
   }
   const col = axis(x, o.x, this.grid.cols, shape.w);
-  const row = axis(y, o.y, this.grid.rows, shape.h);
+  // Offset row aim so bottom-middle of stamp lands at the pointer
+  const adjustedY = y - (shape.h / 2) * o.cell;
+  const row = axis(adjustedY, o.y, this.grid.rows, shape.h);
   if (row === null || col === null) return null;
-  return { row: row, col: col };
+  return { row: row, col: col, x: x, y: y };
 };
 
 Game.prototype.layout = function () {
@@ -655,7 +656,6 @@ Game.prototype.paint = function () {
     left: this.queue.length,
     wave: this.plan ? this.plan.wave || this.wave : this.wave,
     cleared: this.cleared,
-    lost: this.lost && !this.ended,
     testPlan: !!this.testPlan,
     queue: this.queue,
   });
@@ -690,6 +690,7 @@ Game.prototype.drawBoard = function (ctx) {
   if (!this.preview || !this.queue.length || this.waiting()) return;
   const kind = this.queue[0];
   const cells = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
+  if (!cells.length) return;
   for (let i = 0; i < cells.length; i++) {
     const x = o.x + cells[i].c * o.cell;
     const y = o.y + cells[i].r * o.cell;
@@ -742,4 +743,5 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 

@@ -7,7 +7,6 @@ function Ui() {
   this.elLeft = document.getElementById("stamp-left");
   this.elClears = document.getElementById("score-clears");
   this.elTray = document.getElementById("stamp-tray");
-  this.elLost = document.getElementById("lost-flag");
   this.elHud = document.getElementById("hud");
   this.elHudBottom = document.getElementById("hud-bottom");
   this.elEndTitle = document.getElementById("end-title");
@@ -112,7 +111,6 @@ Ui.prototype.paintHud = function (view) {
   if (this.elLeft) this.elLeft.textContent = view.left + " LEFT";
   if (this.elWave) this.elWave.textContent = view.testPlan ? "TEST" : "WAVE " + view.wave;
   if (this.elClears) this.elClears.textContent = "\u2605 " + view.cleared;
-  if (this.elLost) this.elLost.hidden = !view.lost;
   this.paintTray(view.queue);
 };
 
