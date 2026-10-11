@@ -10,7 +10,7 @@ const THIN_CELL_WEIGHTS = {
 
 const CENTERED_DEFAULT = 0.4;
 const TIGHT_DEFAULT = 0.6;
-const THIN_DEFAULT = 0.25;
+const THIN_DEFAULT = 0.45;
 
 function GridBuilder() {}
 
