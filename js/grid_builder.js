@@ -11,6 +11,7 @@ const THIN_CELL_WEIGHTS = {
 const CENTERED_DEFAULT = 0.4;
 const TIGHT_DEFAULT = 0.6;
 const THIN_DEFAULT = 0.45;
+const MIN_BLOB_SIZE = 3;
 
 function GridBuilder() {}
 
@@ -94,16 +95,17 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered) {
   let nextBlob = 0;
   for (let i = 0; i < stamps.length; i++) {
     let small = false;
-    let grown = blobSize.length > 0;
+    let deficit = 0;
     for (let b = 0; b < blobSize.length; b++) {
       if (!blobSize[b]) continue;
-      if (blobSize[b] < 3) {
+      if (blobSize[b] < MIN_BLOB_SIZE) {
         small = true;
-        grown = false;
+        deficit += MIN_BLOB_SIZE - blobSize[b];
       }
     }
     const left = stamps.length - i;
-    const wantNew = i > 0 && grown && left >= 3 && Math.random() < 0.5;
+    const canNew = left >= deficit + MIN_BLOB_SIZE;
+    const wantNew = i > 0 && canNew && Math.random() < 0.5;
     const placed = GridBuilder.dropStamp(grid, stamps[i], i, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, stampKeep, blobSize, nextBlob);
     if (!placed) return null;
     anchors.push({ row: placed.row, col: placed.col });
@@ -267,7 +269,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       if (touch[b].length < 2) continue;
       hits.push(b);
       if (join < 0) join = b;
-      if (small && blobSize[b] && blobSize[b] < 3) join = b;
+      if (small && blobSize[b] && blobSize[b] < MIN_BLOB_SIZE) join = b;
     }
     if (first) {
       let edge = false;
@@ -291,7 +293,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       return;
     }
     if (join < 0) return;
-    if (small && !(blobSize[join] && blobSize[join] < 3)) return;
+    if (small && !(blobSize[join] && blobSize[join] < MIN_BLOB_SIZE)) return;
     legal.push({ cells: cells, hits: hits, join: join, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
   }
 
@@ -634,3 +636,4 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
