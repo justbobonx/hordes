@@ -3,18 +3,18 @@
 function Planner() {}
 
 Planner.INTRO = {
-  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner" },
-  2: { cols: 6, rows: 7, stamps: ["33"], open: "clipped" },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "edge" },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped" },
-  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner" },
+  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin:0 },
+  2: { cols: 6, rows: 7, stamps: ["33"], open: "clipped", thin:0 },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "edge", thin:0 },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", thin:0 },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", thin:0 },
 };
 
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
   const scripted = Planner.INTRO[w];
   if (scripted) {
-    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open }), locked: false }];
+    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open, thin:scripted.thin }), locked: false }];
   }
   let base = 4;
   let hold = 3;
