@@ -610,9 +610,13 @@ Game.prototype.aim = function (e) {
     return line - 0.5;
   }
   const col = axis(x, o.x, this.grid.cols, shape.w);
-  // Offset row aim so bottom-middle of stamp lands at the pointer
-  const adjustedY = y - (shape.h / 2) * o.cell;
-  const row = axis(adjustedY, o.y, this.grid.rows, shape.h);
+  // Offset only for touch/pen so the bottom edge of the stamp sits at the pointer.
+  // Mouse keeps the unshifted center aim.
+  let aimY = y;
+  if (e.pointerType !== "mouse") {
+    aimY = y - ((shape.h + 1) / 2) * o.cell;
+  }
+  const row = axis(aimY, o.y, this.grid.rows, shape.h);
   if (row === null || col === null) return null;
   return { row: row, col: col, x: x, y: y };
 };
@@ -698,8 +702,12 @@ Game.prototype.drawBoard = function (ctx) {
   }
   const ax = o.x + (this.preview.col + 0.5) * o.cell;
   const ay = o.y + (this.preview.row + 0.5) * o.cell;
-  ctx.fillStyle = "#f2e27a";
   const m = o.cell * 0.16;
+  // Black half-alpha box twice the yellow size, over the stamp hilite, under the yellow.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  const bm = m * 2;
+  ctx.fillRect(ax - bm / 2, ay - bm / 2, bm, bm);
+  ctx.fillStyle = "#f2e27a";
   ctx.fillRect(ax - m / 2, ay - m / 2, m, m);
 };
 
@@ -743,5 +751,6 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 
 
