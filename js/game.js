@@ -94,31 +94,15 @@ Game.prototype.bind = function () {
       self.chrome.enter();
       self.advanceStory();
     },
-    menu: function () {
-      if (self.ui.menuOpen()) self.ui.hideMenu();
-      else self.ui.showMenu();
-    },
-    menuBackdrop: function (e) {
-      if (e.target === self.ui.elMenu) self.ui.hideMenu();
+    back: function () {
+      self.giveUp();
     },
     hint: function () {
       self.onHint();
     },
     reset: function () {
-      self.ui.hideMenu();
-      self.resetWave();
-    },
-    giveUp: function () {
-      self.giveUp();
-    },
-    end: function () {
-      if (self.ended === "lose") {
-        self.ui.hideEnd();
-        self.ended = null;
-        self.resetWave();
-        return;
-      }
-      self.onEnd();
+      if (self.ended === "win") self.onEnd();
+      else self.resetWave();
     },
   });
   const canvas = this.ui.canvas;
@@ -161,8 +145,6 @@ Game.prototype.startOver = function () {
   this.storyQueue = [];
   this.storyAfter = null;
   this.clearHold();
-  this.ui.hideEnd();
-  this.ui.hideMenu();
   this.ui.hidePlan();
   this.ui.hideStory();
   this.ui.showStart();
@@ -171,8 +153,6 @@ Game.prototype.startOver = function () {
 
 Game.prototype.onStart = function (help) {
   this.ui.hideStart();
-  this.ui.hideMenu();
-  this.ui.hideEnd();
   this.ui.hidePlan();
   if (help || !this.seen.start) {
     this.seen.start = true;
@@ -245,8 +225,6 @@ Game.prototype.beginWave = function (plan) {
   this.elapsedMs = 0;
   this.clockOn = Date.now();
   this.clearHold();
-  this.ui.hideEnd();
-  this.ui.hideMenu();
   this.layout();
   this.persist();
   this.paint();
@@ -267,7 +245,7 @@ Game.prototype.restore = function (data) {
   this.clockOn = this.ended ? 0 : Date.now();
   this.ui.hideStart();
   this.layout();
-  if (this.ended) this.showEnd();
+  if (this.ended) this.pauseClock();
 };
 
 Game.prototype.resetWave = function () {
@@ -281,7 +259,6 @@ Game.prototype.resetWave = function () {
   this.elapsedMs = 0;
   this.clockOn = Date.now();
   this.clearHold();
-  this.ui.hideEnd();
   this.persist();
   this.paint();
 };
@@ -290,8 +267,6 @@ Game.prototype.giveUp = function () {
   this.abortActions();
   this.pauseClock();
   this.clearHold();
-  this.ui.hideMenu();
-  this.ui.hideEnd();
   this.grid = null;
   this.ended = null;
   Save.clearBoard();
@@ -301,7 +276,6 @@ Game.prototype.giveUp = function () {
 
 Game.prototype.onEnd = function () {
   const won = this.ended === "win";
-  this.ui.hideEnd();
   this.ended = null;
   Save.clearBoard();
   if (won && !this.testPlan) {
@@ -313,36 +287,13 @@ Game.prototype.onEnd = function () {
   this.openPlan();
 };
 
-Game.prototype.showEnd = function () {
-  this.pauseClock();
-  const won = this.ended === "win";
-  let scorched = 0;
-  for (let r = 0; r < this.grid.rows; r++) {
-    for (let c = 0; c < this.grid.cols; c++) {
-      if (this.grid.at(r, c).is("scorched")) scorched++;
-    }
-  }
-  const cities = this.grid.ruinedCount();
-  let title = "The horde still stands!";
-  let sub = "";
-  if (won && scorched === 0) title = "Precision strike!";
-  else if (won) title = "The horde is gone!";
-  else if (cities > 0) {
-    title = cities === 1 ? "1 city hit!" : cities + " cities hit!";
-    if (this.grid.redCount() > 0) sub = "The horde still stands!";
-  }
-  this.ui.paintEnd(won, this.formatTime(this.elapsedMs), title, sub);
-  this.ui.showEnd();
-  this.persist();
-  this.paint();
-};
-
 Game.prototype.finish = function () {
   if (this.ended) return;
   if (this.actions.length || this.stampHeld) return;
   const clear = this.grid.redCount() === 0 && !this.lost && this.grid.ruinedCount() === 0;
   this.ended = clear ? "win" : "lose";
-  this.showEnd();
+  this.pauseClock();
+  this.persist();
   this.paint();
 };
 
@@ -352,13 +303,13 @@ Game.prototype.waiting = function () {
 
 Game.prototype.dropAt = function (row, col) {
   if (!this.grid || this.ended || !this.queue.length || this.waiting()) return;
-  if (this.ui.menuOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.endOpen()) return;
+  if (this.ui.storyOpen() || this.ui.planOpen()) return;
   this.beginDrop(row, col, false);
 };
 
 Game.prototype.onHint = function () {
   if (!this.grid || this.ended || !this.queue.length || !this.plan || this.waiting()) return;
-  if (this.ui.menuOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.endOpen() || this.ui.startOpen()) return;
+  if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
   const index = this.plan.stamps.length - this.queue.length;
   const seat = this.anchors[index];
   if (!seat) return;
@@ -550,7 +501,7 @@ Game.prototype.abortActions = function () {
 
 Game.prototype.onDown = function (e) {
   if (!this.grid || this.ended || this.waiting()) return;
-  if (this.ui.menuOpen() || this.ui.endOpen() || this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
+  if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
   e.preventDefault();
   const hit = this.aim(e);
   if (!hit) return;
@@ -656,13 +607,52 @@ Game.prototype.paint = function () {
   ctx.fillStyle = "#171c14";
   ctx.fillRect(0, 0, w, h);
   if (this.grid) this.drawBoard(ctx);
+  const status = this.statusView();
   this.ui.paintHud({
-    left: this.queue.length,
     wave: this.plan ? this.plan.wave || this.wave : this.wave,
-    cleared: this.cleared,
     testPlan: !!this.testPlan,
     queue: this.queue,
+    statusText: status.text,
+    statusClass: status.cls,
+    resetLabel: status.resetLabel,
+    hideHint: status.hideHint,
   });
+};
+
+Game.prototype.statusView = function () {
+  if (!this.grid) return { text: "", cls: "", resetLabel: "RESET", hideHint: false };
+  const cities = this.grid.ruinedCount();
+  const hordeGone = this.grid.redCount() === 0 && !this.lost;
+  const piecesGone = this.queue.length === 0;
+  let text = "";
+  let cls = "";
+  if (!piecesGone) {
+    if (cities > 0) {
+      text = cities + " CITIES DESTROYED!";
+      cls = "status-blue";
+    }
+  } else {
+    if (hordeGone && cities === 0) {
+      const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
+      text = "HORDE DESTROYED! (" + this.formatTime(elapsed) + ")";
+      cls = "status-green";
+    } else if (hordeGone && cities > 0) {
+      text = cities + " CITIES DESTROYED!";
+      cls = "status-red";
+    } else {
+      text = "THE HORDE LIVES!";
+      cls = "status-red";
+    }
+  }
+  let resetLabel = "RESET";
+  if (this.ended === "win") resetLabel = "NEXT WAVE";
+  else if (this.ended === "lose" || piecesGone) resetLabel = "TRY AGAIN";
+  return {
+    text: text,
+    cls: cls,
+    resetLabel: resetLabel,
+    hideHint: piecesGone,
+  };
 };
 
 Game.prototype.drawBoard = function (ctx) {

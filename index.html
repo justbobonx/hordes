@@ -12,19 +12,17 @@
     <canvas id="board"></canvas>
 
     <div id="hud">
-      <div class="hud-left"><span id="stamp-left">0 LEFT</span></div>
-      <div class="hud-mid"><span id="wave-label">WAVE 1</span></div>
-      <div class="hud-right"><span id="score-clears">★ 0</span></div>
       <div id="stamp-tray"></div>
       <div id="lost-flag" hidden>LOST</div>
     </div>
 
     <div id="hud-bottom">
-      <div class="hud-left">
-        <button id="btn-menu" type="button">MENU</button>
-      </div>
+      <div class="hud-left"><span id="wave-label">WAVE 1</span></div>
+      <div class="hud-mid"><span id="status-msg"></span></div>
       <div class="hud-right">
+        <button id="btn-back" type="button">BACK</button>
         <button id="btn-hint" type="button">HINT</button>
+        <button id="btn-reset" type="button">RESET</button>
       </div>
     </div>
 
@@ -41,13 +39,6 @@
       <div id="startVer">v=0.4.0</div>
     </div>
 
-    <div id="menu-screen" class="overlay" hidden>
-      <div class="panel menu-panel">
-        <button id="btn-reset-menu" type="button">RESET</button>
-        <button id="btn-give-up" type="button">GIVE UP</button>
-      </div>
-    </div>
-
     <div id="plan-screen" class="overlay" hidden>
       <div id="plan-row" class="plan-row"></div>
       <button id="btn-plan-back" type="button">BACK</button>
@@ -55,15 +46,6 @@
 
     <div id="story-screen" class="overlay" hidden>
       <div id="story-slot"></div>
-    </div>
-
-    <div id="end-screen" class="overlay" hidden>
-      <div class="panel">
-        <h1 id="end-title">The horde is gone!</h1>
-        <div id="end-note" class="end-note"></div>
-        <div id="end-time" class="end-time">0:00</div>
-        <button id="btn-end" type="button">NEXT</button>
-      </div>
     </div>
 
     <script src="js/sprite.js?v=0.4.0"></script>

@@ -4,24 +4,16 @@ function Ui() {
   this.canvas = document.getElementById("board");
   this.ctx = this.canvas.getContext("2d");
   this.elWave = document.getElementById("wave-label");
-  this.elLeft = document.getElementById("stamp-left");
-  this.elClears = document.getElementById("score-clears");
+  this.elStatus = document.getElementById("status-msg");
   this.elTray = document.getElementById("stamp-tray");
   this.elHud = document.getElementById("hud");
   this.elHudBottom = document.getElementById("hud-bottom");
-  this.elEndTitle = document.getElementById("end-title");
-  this.elEndTime = document.getElementById("end-time");
-  this.elEndNote = document.getElementById("end-note");
-  this.btnEnd = document.getElementById("btn-end");
-  this.btnMenu = document.getElementById("btn-menu");
+  this.btnBack = document.getElementById("btn-back");
   this.btnHint = document.getElementById("btn-hint");
-  this.btnResetMenu = document.getElementById("btn-reset-menu");
-  this.btnGiveUp = document.getElementById("btn-give-up");
+  this.btnReset = document.getElementById("btn-reset");
   this.btnStart = document.getElementById("btn-start");
   this.btnHelp = document.getElementById("btn-help");
   this.elStart = document.getElementById("start-screen");
-  this.elMenu = document.getElementById("menu-screen");
-  this.elEnd = document.getElementById("end-screen");
   this.elPlan = document.getElementById("plan-screen");
   this.elPlanRow = document.getElementById("plan-row");
   this.btnPlanBack = document.getElementById("btn-plan-back");
@@ -31,10 +23,6 @@ function Ui() {
   this.onStoryContinue = null;
 }
 
-Ui.prototype.endOpen = function () {
-  return !!(this.elEnd && !this.elEnd.hidden);
-};
-
 Ui.prototype.planOpen = function () {
   return !!(this.elPlan && !this.elPlan.hidden);
 };
@@ -43,28 +31,8 @@ Ui.prototype.storyOpen = function () {
   return !!(this.elStory && !this.elStory.hidden);
 };
 
-Ui.prototype.menuOpen = function () {
-  return !!(this.elMenu && !this.elMenu.hidden);
-};
-
 Ui.prototype.startOpen = function () {
   return !!(this.elStart && !this.elStart.hidden);
-};
-
-Ui.prototype.hideEnd = function () {
-  if (this.elEnd) this.elEnd.hidden = true;
-};
-
-Ui.prototype.showEnd = function () {
-  if (this.elEnd) this.elEnd.hidden = false;
-};
-
-Ui.prototype.hideMenu = function () {
-  if (this.elMenu) this.elMenu.hidden = true;
-};
-
-Ui.prototype.showMenu = function () {
-  if (this.elMenu) this.elMenu.hidden = false;
 };
 
 Ui.prototype.hideStart = function () {
@@ -108,10 +76,17 @@ Ui.prototype.hudPad = function () {
 };
 
 Ui.prototype.paintHud = function (view) {
-  if (this.elLeft) this.elLeft.textContent = view.left + " LEFT";
   if (this.elWave) this.elWave.textContent = view.testPlan ? "TEST" : "WAVE " + view.wave;
-  if (this.elClears) this.elClears.textContent = "\u2605 " + view.cleared;
+  this.paintStatus(view);
   this.paintTray(view.queue);
+  if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
+  if (this.btnReset) this.btnReset.textContent = view.resetLabel || "RESET";
+};
+
+Ui.prototype.paintStatus = function (view) {
+  if (!this.elStatus) return;
+  this.elStatus.textContent = view.statusText || "";
+  this.elStatus.className = view.statusClass || "";
 };
 
 Ui.prototype.paintTray = function (queue) {
@@ -131,13 +106,6 @@ Ui.prototype.paintTray = function (queue) {
     }
     this.elTray.appendChild(stamp);
   }
-};
-
-Ui.prototype.paintEnd = function (won, timeText, title, sub) {
-  if (this.elEndTitle) this.elEndTitle.textContent = title || (won ? "The horde is gone!" : "The horde still stands!");
-  if (this.elEndTime) this.elEndTime.textContent = timeText;
-  if (this.elEndNote) this.elEndNote.textContent = sub || "";
-  if (this.btnEnd) this.btnEnd.textContent = won ? "NEXT" : "TRY AGAIN";
 };
 
 Ui.prototype.paintPlans = function (cards) {
@@ -242,12 +210,9 @@ Ui.prototype.bind = function (handlers) {
     e.stopPropagation();
     if (handlers.planBack) handlers.planBack();
   });
-  on(this.btnMenu, "click", handlers.menu);
+  on(this.btnBack, "click", handlers.back);
   on(this.btnHint, "click", handlers.hint);
-  on(this.btnResetMenu, "click", handlers.reset);
-  on(this.btnGiveUp, "click", handlers.giveUp);
-  on(this.btnEnd, "click", handlers.end);
-  on(this.elMenu, "click", handlers.menuBackdrop);
+  on(this.btnReset, "click", handlers.reset);
   const start = this.btnStart;
   if (!start) return;
   const label = start.textContent;
