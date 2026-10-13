@@ -61,23 +61,31 @@ button, a { font-family: inherit; }
   border-top-width: 2px;
   padding-bottom: calc(8px + env(safe-area-inset-bottom));
   justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 
 .hud-left, .hud-mid, .hud-right {
   min-width: 72px;
   font-size: 28px;
   letter-spacing: 1px;
+  min-width: 0;
 }
 
 .hud-mid {
   flex: 1;
   text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .hud-right {
   text-align: right;
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 #status-msg.status-blue { color: #8eb0f0; }
@@ -220,6 +228,7 @@ h1 {
   background: #e07a2f;
   color: #1c120f;
 }
+
 .plan-cities { color: #8eb0f0; }
 .plan-select { color: #f2e27a; font-size: 24px; }
 
@@ -244,3 +253,40 @@ h1 {
 }
 
 .story-continue { color: #f2e27a; font-size: 22px; }
+
+/* Mobile: force wave+debug to its own line, then status and buttons below.
+   Buttons stay right-justified. Text wraps inside each section. */
+@media (max-width: 520px) {
+  #hud-bottom {
+    justify-content: flex-start;
+    padding-left: 6px;
+    padding-right: 6px;
+    align-items: center;
+  }
+  .hud-left {
+    flex: 1 1 100%;
+    text-align: center;
+    font-size: 24px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    order: 1;
+  }
+  .hud-mid {
+    flex: 1 1 auto;
+    font-size: 24px;
+    text-align: left;
+    order: 2;
+    min-width: 0;
+  }
+  .hud-right {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    margin-left: auto;
+    order: 3;
+  }
+  button {
+    font-size: 22px;
+    padding: 6px 8px;
+  }
+}
