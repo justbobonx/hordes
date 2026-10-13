@@ -467,7 +467,7 @@ Game.prototype.stepWave = function (action) {
     if (this.grid.apply([hit])) this.lost = true;
     if (action.hint) {
       const cell = this.grid.at(hit.r, hit.c);
-      if (cell) cell.hint = true;
+      if (cell && cell.is("cleared")) cell.setType("cleared_hint");
     }
     const spread = this.onCellLand(action, hit.r, hit.c);
     if (action.stopped || (spread && spread.stop)) continue;
@@ -525,7 +525,7 @@ Game.prototype.flushActions = function () {
         if (this.grid.apply([hit])) this.lost = true;
         if (action.hint) {
           const cell = this.grid.at(hit.r, hit.c);
-          if (cell) cell.hint = true;
+          if (cell && cell.is("cleared")) cell.setType("cleared_hint");
         }
         this.onCellLand(action, hit.r, hit.c);
       }
@@ -752,6 +752,7 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 
 
 

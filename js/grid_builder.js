@@ -42,7 +42,7 @@ GridBuilder.build = function (plan) {
   for (let attempt = 0; attempt < 36; attempt++) {
     const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered);
     if (!built) continue;
-    GridBuilder.paintCities(built.grid);
+    GridBuilder.paintCities(built.grid, stamps.length);
     GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.stampKeep, thin);
     built.grid.anchors = built.anchors || [];
     built.grid.dress();
@@ -61,11 +61,11 @@ GridBuilder.build = function (plan) {
     for (let i = 0; i < seed.length; i++) grid.at(seed[i].r, seed[i].c).setType("horde");
     grid.anchors = [{ row: midR, col: midC }];
   } else {
-    GridBuilder.paintCities(grid);
+    GridBuilder.paintCities(grid, stamps.length);
     GridBuilder.thin(grid, built.cover, built.sole, built.own, built.stampKeep, thin);
     grid.anchors = built.anchors || [];
   }
-  if (!built) GridBuilder.paintCities(grid);
+  if (!built) GridBuilder.paintCities(grid, stamps.length);
   grid.dress();
   return grid;
 };
@@ -454,7 +454,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   return { spawned: spawned, row: pick.row, col: pick.col };
 };
 
-GridBuilder.paintCities = function (grid) {
+GridBuilder.paintCities = function (grid, np) {
   const rows = grid.rows;
   const cols = grid.cols;
   const dirs = [
@@ -463,6 +463,10 @@ GridBuilder.paintCities = function (grid) {
     [0, 1],
     [0, -1],
   ];
+  np = np | 0;
+  if (np < 2) np = 2;
+
+  // 1. Horde crook seeds
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (!grid.at(r, c).is("grass")) continue;
@@ -474,33 +478,46 @@ GridBuilder.paintCities = function (grid) {
       if (redN >= 2) grid.at(r, c).setType("city");
     }
   }
-  let seeded = 0;
+  let p1 = 0;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (grid.at(r, c).is("city")) seeded++;
+      if (grid.at(r, c).is("city")) p1++;
     }
   }
-  if (!seeded) {
-    const rim = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (!grid.at(r, c).is("grass")) continue;
-        let redN = 0;
-        for (let d = 0; d < 4; d++) {
-          const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
-          if (cell && cell.is("horde")) redN++;
-        }
-        if (redN === 1) rim.push({ r: r, c: c });
+
+  // 2. Horde rim seeds
+  const rim = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!grid.at(r, c).is("grass")) continue;
+      let redN = 0;
+      for (let d = 0; d < 4; d++) {
+        const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
+        if (cell && cell.is("horde")) redN++;
       }
-    }
-    GridBuilder.shuffle(rim);
-    let extra = 1;
-    if (Math.random() < 0.5) extra = 2;
-    for (let i = 0; i < rim.length && extra > 0; i++) {
-      grid.at(rim[i].r, rim[i].c).setType("city");
-      extra--;
+      if (redN >= 1) rim.push({ r: r, c: c });
     }
   }
+  GridBuilder.shuffle(rim);
+  const minRim = Math.max(0, ((np / 2) | 0) - p1);
+  const maxRim = Math.max(2, np * 2 - p1);
+  const targetRim = minRim + ((Math.random() * (maxRim - minRim + 1)) | 0);
+  let placedRim = 0;
+  for (let i = 0; i < rim.length && placedRim < targetRim; i++) {
+    const r = rim[i].r;
+    const c = rim[i].c;
+    if (!grid.at(r, c).is("grass")) continue;
+    let adjCity = false;
+    for (let d = 0; d < 4; d++) {
+      const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
+      if (cell && cell.is("city")) adjCity = true;
+    }
+    if (adjCity) continue;
+    grid.at(r, c).setType("city");
+    placedRim++;
+  }
+
+  // 3. Fringe seeds
   const open = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -522,50 +539,8 @@ GridBuilder.paintCities = function (grid) {
     }
     if (clear) grid.at(r, c).setType("city");
   }
-  const fringe = [];
-  for (let i = 0; i < open.length; i++) {
-    const r = open[i].r;
-    const c = open[i].c;
-    if (!grid.at(r, c).is("grass")) continue;
-    let boxed = true;
-    let clear = true;
-    for (let d = 0; d < 4; d++) {
-      const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
-      if (cell && !cell.is("grass")) boxed = false;
-    }
-    for (let rr = r - 2; rr <= r + 2 && clear; rr++) {
-      for (let cc = c - 2; cc <= c + 2; cc++) {
-        if (rr === r && cc === c) continue;
-        const cell = grid.at(rr, cc);
-        if (cell && (cell.is("horde") || cell.is("city"))) clear = false;
-      }
-    }
-    if (boxed && clear) fringe.push(open[i]);
-  }
-  let extra = 0;
-  if (Math.random() < 0.55) extra = 1;
-  if (Math.random() < 0.25) extra = 2;
-  for (let i = 0; i < fringe.length && extra > 0; i++) {
-    const r = fringe[i].r;
-    const c = fringe[i].c;
-    if (!grid.at(r, c).is("grass")) continue;
-    let boxed = true;
-    let clear = true;
-    for (let d = 0; d < 4; d++) {
-      const cell = grid.at(r + dirs[d][0], c + dirs[d][1]);
-      if (cell && !cell.is("grass")) boxed = false;
-    }
-    for (let rr = r - 2; rr <= r + 2 && clear; rr++) {
-      for (let cc = c - 2; cc <= c + 2; cc++) {
-        if (rr === r && cc === c) continue;
-        const cell = grid.at(rr, cc);
-        if (cell && (cell.is("horde") || cell.is("city"))) clear = false;
-      }
-    }
-    if (!boxed || !clear) continue;
-    grid.at(r, c).setType("city");
-    extra--;
-  }
+
+  // 4. Seed blob growth
   const seen = [];
   for (let r = 0; r < rows; r++) seen.push([]);
   const redFlows = [1, 2, 3, 4];
@@ -636,4 +611,5 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 

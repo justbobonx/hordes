@@ -9,8 +9,9 @@ const CELL_TYPES = {
   scorched: { fill: "#1c5a28", mark: null, group: false, rad: 0.5 },
   city: { fill: "#2a62d0", mark: null, group: true, rad: 1 },
   horde: { fill: "#c4392f", mark: null, group: false, rad: 1 },
-  cleared: { fill: "#3f8f45", mark: "#c4392f", group: false, rad: 1 },
-  ruined: { fill: "#8a8a8a", mark: "#2a2a2a", group: true, rad: 1 },
+  cleared: { fill: "#3b7540", mark: "#c4392f", group: false, rad: 1 },
+  cleared_hint: { fill: "#3b7540", mark: "#e07a2f", group: false, rad: 1 },
+  ruined: { fill: "#556787", mark: "#2a2a2a", group: true, rad: 1 },
 };
 
 function Cell(type) {
@@ -90,8 +91,7 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
   }
 
   if (USE_SPRITES && sprites) {
-    const id = this.hint && this.type === "cleared" ? "cleared_hint" : this.type;
-    const spr = sprites.get(id);
+    const spr = sprites.get(this.type);
     if (spr) spr.draw(ctx, ix, iy, is);
     return;
   }
@@ -109,13 +109,4 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.lineTo(x + pad, y + size - pad);
     ctx.stroke();
   }
-  if (!this.hint) return;
-  const hintPad = size * 0.22;
-  ctx.strokeStyle = "#e07a2f";
-  ctx.beginPath();
-  ctx.moveTo(x + hintPad, y + hintPad);
-  ctx.lineTo(x + size - hintPad, y + size - hintPad);
-  ctx.moveTo(x + size - hintPad, y + hintPad);
-  ctx.lineTo(x + hintPad, y + size - hintPad);
-  ctx.stroke();
 };
