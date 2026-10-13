@@ -18,7 +18,6 @@ function Game() {
   this.elapsedMs = 0;
   this.storyQueue = [];
   this.storyAfter = null;
-  this.holdTimer = 0;
   this.hold = null;
   this.preview = null;
   this.origin = { x: 0, y: 0, cell: 32, rows: 6, cols: 6 };
@@ -252,7 +251,6 @@ Game.prototype.resetWave = function () {
   if (!this.grid || !this.initial) return;
   this.abortActions();
   this.grid.writeTypes(this.initial);
-  this.grid.writeHints(null);
   this.queue = this.plan.stamps.slice();
   this.lost = false;
   this.ended = null;
@@ -407,19 +405,25 @@ Game.prototype.stepActions = function () {
   else this.settleStamp();
 };
 
+// Shared land path for both animated step and flush.
+// Returns the onCellLand result (or null).
+Game.prototype.landCell = function (action, hit) {
+  const key = hit.r + "," + hit.c;
+  if (action.landed[key]) return null;
+  action.landed[key] = true;
+  if (this.grid.apply([hit])) this.lost = true;
+  if (action.hint) {
+    const cell = this.grid.at(hit.r, hit.c);
+    if (cell && cell.is("cleared")) cell.setType("cleared_hint");
+  }
+  return this.onCellLand(action, hit.r, hit.c);
+};
+
 Game.prototype.stepWave = function (action) {
   const spreaders = [];
   for (let i = 0; i < action.frontier.length; i++) {
     const hit = action.frontier[i];
-    const key = hit.r + "," + hit.c;
-    if (action.landed[key]) continue;
-    action.landed[key] = true;
-    if (this.grid.apply([hit])) this.lost = true;
-    if (action.hint) {
-      const cell = this.grid.at(hit.r, hit.c);
-      if (cell && cell.is("cleared")) cell.setType("cleared_hint");
-    }
-    const spread = this.onCellLand(action, hit.r, hit.c);
+    const spread = this.landCell(action, hit);
     if (action.stopped || (spread && spread.stop)) continue;
     spreaders.push(hit);
   }
@@ -468,16 +472,7 @@ Game.prototype.flushActions = function () {
     const action = this.actions[0];
     if (action.type === "wave" && !action.stopped) {
       for (let i = 0; i < action.cells.length; i++) {
-        const hit = action.cells[i];
-        const key = hit.r + "," + hit.c;
-        if (action.landed[key]) continue;
-        action.landed[key] = true;
-        if (this.grid.apply([hit])) this.lost = true;
-        if (action.hint) {
-          const cell = this.grid.at(hit.r, hit.c);
-          if (cell && cell.is("cleared")) cell.setType("cleared_hint");
-        }
-        this.onCellLand(action, hit.r, hit.c);
+        this.landCell(action, action.cells[i]);
       }
     }
     action.done = true;
@@ -529,8 +524,6 @@ Game.prototype.onUp = function (e) {
 };
 
 Game.prototype.clearHold = function () {
-  if (this.holdTimer) window.clearTimeout(this.holdTimer);
-  this.holdTimer = 0;
   this.hold = null;
   this.preview = null;
 };
@@ -672,7 +665,6 @@ Game.prototype.drawBoard = function (ctx) {
   const gap = Math.max(1, o.cell * 0.03);
   ctx.fillStyle = "#10140e";
   ctx.fillRect(o.x - gap, o.y - gap, o.cell * cols + gap * 2, o.cell * rows + gap * 2);
-  Cell.dressGrid(this.grid);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       this.grid.at(r, c).draw(ctx, this.sprites, o.x + c * o.cell, o.y + r * o.cell, o.cell);
@@ -737,7 +729,6 @@ Game.prototype.persist = function () {
     rows: this.grid.rows,
     cols: this.grid.cols,
     cells: this.grid.types(),
-    hints: this.grid.hintMask(),
     anchors: this.anchors,
     initial: this.initial,
     queue: this.queue.slice(),
@@ -752,7 +743,3 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
-
-
-
-

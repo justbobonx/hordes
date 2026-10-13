@@ -61,14 +61,6 @@ Plan.copy = function (plan) {
   return out;
 };
 
-Plan.has = function (plan, kind) {
-  if (!plan || !plan.stamps) return false;
-  for (let i = 0; i < plan.stamps.length; i++) {
-    if (plan.stamps[i] === kind) return true;
-  }
-  return false;
-};
-
 Plan.label = function (kind) {
   const shape = Grid.STAMP_DEFINITIONS[kind];
   if (!shape) return kind || "";

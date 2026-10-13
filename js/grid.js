@@ -107,24 +107,7 @@ Grid.prototype.writeTypes = function (rows) {
       this.cells[r][c].setType(name);
     }
   }
-};
-
-Grid.prototype.hintMask = function () {
-  const rows = [];
-  for (let r = 0; r < this.rows; r++) {
-    const row = [];
-    for (let c = 0; c < this.cols; c++) row.push(this.cells[r][c].hint ? 1 : 0);
-    rows.push(row);
-  }
-  return rows;
-};
-
-Grid.prototype.writeHints = function (rows) {
-  for (let r = 0; r < this.rows; r++) {
-    for (let c = 0; c < this.cols; c++) {
-      this.cells[r][c].hint = !!(rows && rows[r] && rows[r][c]);
-    }
-  }
+  this.dress();
 };
 
 Grid.prototype.assignGroups = function () {
@@ -168,10 +151,11 @@ Grid.prototype.dress = function () {
   for (let r = 0; r < this.rows; r++) {
     for (let c = 0; c < this.cols; c++) this.cells[r][c].dress();
   }
+  Cell.dressGrid(this);
 };
 
 Grid.prototype.dump = function () {
-  return { rows: this.rows, cols: this.cols, cells: this.types(), hints: this.hintMask(), anchors: this.anchors || [] };
+  return { rows: this.rows, cols: this.cols, cells: this.types(), anchors: this.anchors || [] };
 };
 
 Grid.load = function (data) {
@@ -181,7 +165,6 @@ Grid.load = function (data) {
   if (!rows || !cols) return null;
   const grid = new Grid(rows, cols);
   grid.writeTypes(data.cells);
-  grid.writeHints(data.hints);
   grid.anchors = Array.isArray(data.anchors) ? data.anchors : [];
   grid.dress();
   return grid;

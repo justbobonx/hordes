@@ -46,7 +46,6 @@ function Cell(type) {
   this.type = type || "grass";
   this.fill = CELL_TYPES.grass.fill;
   this.mark = null;
-  this.hint = false;
   this.round = [true, true, true, true];
   this.groupId = null;
   this.seed = (Math.random() * 0xffffffff) >>> 0;
