@@ -85,6 +85,7 @@ Grid.prototype.apply = function (cells) {
       ruined = true;
     } else if (cell.is("grass")) cell.setType("scorched");
   }
+  this.dress();
   return ruined;
 };
 
@@ -126,7 +127,44 @@ Grid.prototype.writeHints = function (rows) {
   }
 };
 
+Grid.prototype.assignGroups = function () {
+  const seen = [];
+  for (let r = 0; r < this.rows; r++) seen.push([]);
+  let nextId = 1;
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
+      if (seen[r][c]) continue;
+      const cell = this.at(r, c);
+      const look = CELL_TYPES[cell.type];
+      if (!look || look.vary !== "group") continue;
+      const id = nextId++;
+      const stack = [{ r: r, c: c }];
+      seen[r][c] = true;
+      while (stack.length) {
+        const cur = stack.pop();
+        this.at(cur.r, cur.c).groupId = id;
+        for (let d = 0; d < 4; d++) {
+          const rr = cur.r + dirs[d][0];
+          const cc = cur.c + dirs[d][1];
+          if (rr < 0 || cc < 0 || rr >= this.rows || cc >= this.cols || seen[rr][cc]) continue;
+          const other = this.at(rr, cc);
+          if (!other) continue;
+          const same = other.type === cell.type ||
+            ((cell.type === "city" || cell.type === "ruined") &&
+             (other.type === "city" || other.type === "ruined"));
+          if (same) {
+            seen[rr][cc] = true;
+            stack.push({ r: rr, c: cc });
+          }
+        }
+      }
+    }
+  }
+};
+
 Grid.prototype.dress = function () {
+  this.assignGroups();
   for (let r = 0; r < this.rows; r++) {
     for (let c = 0; c < this.cols; c++) this.cells[r][c].dress();
   }

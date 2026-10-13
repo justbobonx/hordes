@@ -41,14 +41,14 @@ Game.prototype.boot = function () {
   this.bind();
   this.layout();
   const self = this;
-  this.sprites = SpriteBank.defaults(function () { self.paint(); });
+  this.sprites = SpriteBank.defaults(function () {});
   const board = Save.readBoard();
   if (board && board.cells) this.restore(board);
   else this.ui.showStart();
-  this.paint();
+  this.updateHud();
+  this.loop();
   window.addEventListener("resize", function () {
     self.layout();
-    self.paint();
   });
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
@@ -148,7 +148,7 @@ Game.prototype.startOver = function () {
   this.ui.hidePlan();
   this.ui.hideStory();
   this.ui.showStart();
-  this.paint();
+  this.updateHud();
 };
 
 Game.prototype.onStart = function (help) {
@@ -169,7 +169,7 @@ Game.prototype.openPlan = function () {
     : Planner.offer(this.wave);
   this.ui.paintPlans(cards);
   this.ui.showPlan();
-  this.paint();
+  this.updateHud();
 };
 
 Game.prototype.openStory = function (id, after) {
@@ -227,7 +227,7 @@ Game.prototype.beginWave = function (plan) {
   this.clearHold();
   this.layout();
   this.persist();
-  this.paint();
+  this.updateHud();
 };
 
 Game.prototype.restore = function (data) {
@@ -260,7 +260,7 @@ Game.prototype.resetWave = function () {
   this.clockOn = Date.now();
   this.clearHold();
   this.persist();
-  this.paint();
+  this.updateHud();
 };
 
 Game.prototype.giveUp = function () {
@@ -271,7 +271,7 @@ Game.prototype.giveUp = function () {
   this.ended = null;
   Save.clearBoard();
   this.ui.showStart();
-  this.paint();
+  this.updateHud();
 };
 
 Game.prototype.onEnd = function () {
@@ -294,7 +294,7 @@ Game.prototype.finish = function () {
   this.ended = clear ? "win" : "lose";
   this.pauseClock();
   this.persist();
-  this.paint();
+  this.updateHud();
 };
 
 Game.prototype.waiting = function () {
@@ -347,7 +347,7 @@ Game.prototype.beginDrop = function (row, col, hint) {
   this.stampHeld = true;
   this.clearHold();
   this.persist();
-  this.paint();
+  this.updateHud();
   this.kickActions();
 };
 
@@ -403,7 +403,6 @@ Game.prototype.stepActions = function () {
   const action = this.actions[0];
   if (action.type === "wave") this.stepWave(action);
   if (action.done) this.actions.shift();
-  this.paint();
   if (this.actions.length) this.kickActions();
   else this.settleStamp();
 };
@@ -458,7 +457,7 @@ Game.prototype.settleStamp = function () {
     this.stampHeld = false;
   }
   this.persist();
-  this.paint();
+  this.updateHud();
   if (!this.queue.length) this.finish();
 };
 
@@ -508,7 +507,6 @@ Game.prototype.onDown = function (e) {
   this.clearHold();
   this.hold = { pointerId: e.pointerId };
   this.preview = { row: hit.row, col: hit.col, x: hit.x, y: hit.y };
-  this.paint();
   try {
     this.ui.canvas.setPointerCapture(e.pointerId);
   } catch (err) {}
@@ -519,7 +517,6 @@ Game.prototype.onMove = function (e) {
   const hit = this.aim(e);
   if (!hit) return;
   this.preview = { row: hit.row, col: hit.col, x: hit.x, y: hit.y };
-  this.paint();
 };
 
 Game.prototype.onUp = function (e) {
@@ -600,13 +597,25 @@ Game.prototype.layout = function () {
   };
 };
 
-Game.prototype.paint = function () {
+Game.prototype.draw = function () {
   const ctx = this.ui.ctx;
   const w = window.innerWidth;
   const h = window.innerHeight;
   ctx.fillStyle = "#171c14";
   ctx.fillRect(0, 0, w, h);
   if (this.grid) this.drawBoard(ctx);
+};
+
+Game.prototype.loop = function () {
+  const self = this;
+  function tick() {
+    self.draw();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+};
+
+Game.prototype.updateHud = function () {
   const status = this.statusView();
   this.ui.paintHud({
     wave: this.plan ? this.plan.wave || this.wave : this.wave,

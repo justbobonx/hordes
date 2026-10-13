@@ -5,14 +5,42 @@
 const USE_SPRITES = false;
 
 const CELL_TYPES = {
-  grass: { fill: "#3f8f45", mark: null, group: false, rad: 0.5 },
-  scorched: { fill: "#1c5a28", mark: null, group: false, rad: 0.5 },
-  city: { fill: "#2a62d0", mark: null, group: true, rad: 1 },
-  horde: { fill: "#c4392f", mark: null, group: false, rad: 1 },
-  cleared: { fill: "#3b7540", mark: "#c4392f", group: false, rad: 1 },
-  cleared_hint: { fill: "#3b7540", mark: "#e07a2f", group: false, rad: 1 },
-  ruined: { fill: "#556787", mark: "#2a2a2a", group: true, rad: 1 },
+  grass: { fill: "#3f8f45", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
+  scorched: { fill: "#1c5a28", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
+  city: { fill: "#2a62d0", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09 },
+  horde: { fill: "#c4392f", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.15 },
+  cleared: { fill: "#3b7540", mark: "#c4392f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
+  cleared_hint: { fill: "#3b7540", mark: "#e07a2f", group: false, round: 1, vary: "cell",varyAmount: 0.05 },
+  ruined: { fill: "#556787", mark: "#2a2a2a", group: true, round: 1, vary: "group", varyAmount: 0.05 },
 };
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(r, g, b) {
+  return "#" + ((1 << 24) + ((r & 255) << 16) + ((g & 255) << 8) + (b & 255)).toString(16).slice(1);
+}
+
+function hashSeed(seed) {
+  let h = seed | 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+function varyColor(baseHex, seed, amount) {
+  const rgb = hexToRgb(baseHex);
+  const h = hashSeed(seed);
+  const unit = (h % 10000) / 10000 - 0.5;
+  const delta = unit * amount * 255;
+  return rgbToHex(
+    Math.max(0, Math.min(255, Math.round(rgb[0] + delta))),
+    Math.max(0, Math.min(255, Math.round(rgb[1] + delta))),
+    Math.max(0, Math.min(255, Math.round(rgb[2] + delta)))
+  );
+}
 
 function Cell(type) {
   this.type = type || "grass";
@@ -20,6 +48,9 @@ function Cell(type) {
   this.mark = null;
   this.hint = false;
   this.round = [true, true, true, true];
+  this.groupId = null;
+  this.seed = (Math.random() * 0xffffffff) >>> 0;
+  this.phase = Math.random() * Math.PI * 2;
   this.dress();
 }
 
@@ -34,14 +65,25 @@ Cell.prototype.setType = function (name) {
 
 Cell.prototype.dress = function () {
   const look = CELL_TYPES[this.type] || CELL_TYPES.grass;
-  this.fill = look.fill;
   this.mark = look.mark;
+  const amount = look.varyAmount != null ? look.varyAmount : 0.06;
+  if (look.vary === "cell") {
+    this.fill = varyColor(look.fill, this.seed, amount);
+  } else if (look.vary === "group") {
+    this.fill = varyColor(look.fill, this.groupId || this.seed, amount);
+  } else {
+    this.fill = look.fill;
+  }
 };
 
 Cell.sameGroup = function (grid, cell, row, col) {
   if (row < 0 || col < 0 || row >= grid.rows || col >= grid.cols) return false;
   const other = grid.at(row, col);
-  return other && other.type === cell.type;
+  if (!other) return false;
+  if (other.type === cell.type) return true;
+  const a = cell.type;
+  const b = other.type;
+  return (a === "city" || a === "ruined") && (b === "city" || b === "ruined");
 };
 
 Cell.dressGrid = function (grid) {
@@ -72,7 +114,7 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
 
   const look = CELL_TYPES[this.type] || CELL_TYPES.grass;
   const base = Math.max(4, Math.floor(size * 0.18));
-  const rad = Math.floor(base * (look.rad || 1));
+  const rad = Math.floor(base * (look.round || 1));
   const maxR = is / 2;
   const corners = [
     Math.min(this.round[0] ? rad : 0, maxR),
@@ -81,7 +123,16 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     Math.min(this.round[3] ? rad : 0, maxR),
   ];
 
-  ctx.fillStyle = this.fill;
+  let fill = this.fill;
+  if (look.vary === "pulse") {
+    const t = Date.now() / 1000;
+    const s = Math.sin(t * (Math.PI * 2 / 3.2) + this.phase);
+    const base = look.varyAmount != null ? look.varyAmount : 0.12;
+    const amount = s >= 0 ? s * base * 0.6 : s * base * 1.3;
+    fill = varyColor(look.fill, 0, amount);
+  }
+  ctx.fillStyle = fill;
+
   if (ctx.roundRect) {
     ctx.beginPath();
     ctx.roundRect(ix, iy, is, is, corners);
