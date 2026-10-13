@@ -672,6 +672,7 @@ Game.prototype.drawBoard = function (ctx) {
   const gap = Math.max(1, o.cell * 0.03);
   ctx.fillStyle = "#10140e";
   ctx.fillRect(o.x - gap, o.y - gap, o.cell * cols + gap * 2, o.cell * rows + gap * 2);
+  Cell.dressGrid(this.grid);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       this.grid.at(r, c).draw(ctx, this.sprites, o.x + c * o.cell, o.y + r * o.cell, o.cell);
