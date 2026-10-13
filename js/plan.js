@@ -20,9 +20,6 @@ Plan.copy = function (plan) {
   if (!cols && plan.size) cols = plan.size | 0;
   if (rows < 3) rows = 3;
   if (cols < 3) cols = 3;
-  let cities = plan.cities | 0;
-  if (cities < 0) cities = 0;
-  if (cities > 8) cities = 8;
   const wave = plan.wave | 0 || 1;
   let openSeat = plan.open;
   if (openSeat !== "edge" && openSeat !== "clipped" && openSeat !== "inner" && openSeat !== "any") openSeat = "any";
@@ -44,17 +41,24 @@ Plan.copy = function (plan) {
   if (thin !== thin) thin = THIN_DEFAULT;
   if (thin < 0) thin = 0;
   if (thin > 1) thin = 1;
-  return {
+  let area = plan.area;
+  if (area != null) {
+    area = area | 0;
+    if (area < 15) area = 15;
+    if (area > 20) area = 20;
+  }
+  const out = {
     wave: wave,
     rows: rows,
     cols: cols,
     stamps: stamps,
-    cities: cities,
     open: openSeat,
     centered: centered,
     tight: tight,
     thin: thin,
   };
+  if (area != null) out.area = area;
+  return out;
 };
 
 Plan.has = function (plan, kind) {
@@ -101,6 +105,5 @@ Plan.fromQuery = function (search) {
   }
   if (!cols || !rows) return null;
   const stamps = parts[1] ? parts[1].split(/[+ ]+/) : ["33"];
-  const cities = parts.length > 2 ? parseInt(parts[2], 10) : 2;
-  return Plan.copy({ wave: 0, rows: rows, cols: cols, stamps: stamps, cities: cities });
+  return Plan.copy({ wave: 0, rows: rows, cols: cols, stamps: stamps });
 };

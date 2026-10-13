@@ -619,6 +619,7 @@ Game.prototype.updateHud = function () {
   const status = this.statusView();
   this.ui.paintHud({
     wave: this.plan ? this.plan.wave || this.wave : this.wave,
+    plan: this.plan,
     testPlan: !!this.testPlan,
     queue: this.queue,
     statusText: status.text,

@@ -50,7 +50,9 @@ Planner.offer = function (wave) {
     if (piece.w > maxW) maxW = piece.w;
     if (piece.h > maxH) maxH = piece.h;
   }
-  let area = cells * (1.5 + Math.random() * 0.5);
+  const mult = 1.5 + Math.random() * 0.5;
+  let area = cells * mult;
+  const a = Math.round(mult * 10);
   const minC = maxW + 2;
   const minR = maxH + 2;
   if (area < minC * minR) area = minC * minR;
@@ -73,6 +75,8 @@ Planner.offer = function (wave) {
       open: "any",
       centered: (Math.random()+Math.random())/2,
       tight: (Math.random()+Math.random())/2,
+      thin: (Math.random()+Math.random())/2,
+      area: a,
     }),
     locked: false,
   }];

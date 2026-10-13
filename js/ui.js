@@ -76,7 +76,19 @@ Ui.prototype.hudPad = function () {
 };
 
 Ui.prototype.paintHud = function (view) {
-  if (this.elWave) this.elWave.textContent = view.testPlan ? "TEST" : "WAVE " + view.wave;
+  if (this.elWave) {
+    let label = view.testPlan ? "TEST" : "WAVE " + view.wave;
+    if (view.plan) {
+      const c = Math.round((+view.plan.centered || 0) * 100);
+      const f = Math.round((+view.plan.tight || 0) * 100);
+      const t = Math.round((+view.plan.thin || 0) * 100);
+      const pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      label += " (C:" + pad(c) + ",F:" + pad(f) + ",T:" + pad(t);
+      if (view.plan.area != null) label += ",A:" + view.plan.area;
+      label += ")";
+    }
+    this.elWave.textContent = label;
+  }
   this.paintStatus(view);
   this.paintTray(view.queue);
   if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
@@ -141,7 +153,10 @@ Ui.prototype.makeCard = function (card, index) {
   meta.className = "plan-meta";
   const tightPct = Math.round((+plan.tight || 0) * 100);
   const centeredPct = Math.round((+plan.centered || 0) * 100);
-  meta.textContent = "TIGHT:" + tightPct + "%  CENTERED:" + centeredPct + "%";
+  const thinPct = Math.round((+plan.thin || 0) * 100);
+  let metaText = "C:" + centeredPct + "  F:" + tightPct + "  T:" + thinPct;
+  if (plan.area != null) metaText += "  A:" + plan.area;
+  meta.textContent = metaText;
   btn.appendChild(meta);
 
   const foot = document.createElement("span");
