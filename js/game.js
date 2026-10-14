@@ -737,7 +737,7 @@ Game.prototype.onUp = function (e) {
   const dt = Date.now() - this.hold.t0;
   const trayIndex = this.hold.trayIndex;
   const placed = this.hold.placed;
-  const isClick = !this.hold.moved && dt < 300 && this.hold.onPiece && this.preview;
+  const isClick = !this.hold.moved && dt < 300 && this.preview;
   this.hold = null;
   if (trayIndex != null && !placed) {
     this.preview = null;
@@ -1064,8 +1064,8 @@ Game.prototype.drawBoard = function (ctx) {
     }
   }
   ctx.strokeStyle = "#f2e27a";
-  ctx.lineWidth = Math.max(2, o.cell * 0.07);
-  const inset = Math.max(2, o.cell * 0.05);
+  ctx.lineWidth = Math.max(2, o.cell * 0.05);
+  const inset = Math.max(2, o.cell * 0.04);
   for (let a = 0; a < this.actions.length; a++) {
     const action = this.actions[a];
     if (action.type !== "wave") continue;
