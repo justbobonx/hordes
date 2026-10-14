@@ -5,8 +5,6 @@ function Ui() {
   this.ctx = this.canvas.getContext("2d");
   this.elWave = document.getElementById("wave-label");
   this.elStatus = document.getElementById("status-msg");
-  this.elTray = document.getElementById("stamp-tray");
-  this.elHud = document.getElementById("hud");
   this.elHudBottom = document.getElementById("hud-bottom");
   this.btnBack = document.getElementById("btn-back");
   this.btnHint = document.getElementById("btn-hint");
@@ -70,7 +68,6 @@ Ui.prototype.hudPad = function () {
     return h > 0 ? h : fallback;
   }
   return {
-    top: Math.max(90, barHeight(this.elHud, 90)),
     bot: Math.max(56, barHeight(this.elHudBottom, 56)),
   };
 };
@@ -90,7 +87,6 @@ Ui.prototype.paintHud = function (view) {
     this.elWave.textContent = label;
   }
   this.paintStatus(view);
-  this.paintTray(view.queue);
   if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
   if (this.btnReset) this.btnReset.textContent = view.resetLabel || "RESET";
 };
@@ -99,25 +95,6 @@ Ui.prototype.paintStatus = function (view) {
   if (!this.elStatus) return;
   this.elStatus.textContent = view.statusText || "";
   this.elStatus.className = view.statusClass || "";
-};
-
-Ui.prototype.paintTray = function (queue) {
-  if (!this.elTray) return;
-  this.elTray.innerHTML = "";
-  const list = queue || [];
-  for (let i = list.length - 1; i >= 0; i--) {
-    const live = i === 0;
-    const kind = list[i];
-    const shape = Grid.STAMP_DEFINITIONS[kind];
-    const stamp = document.createElement("div");
-    stamp.className = "stamp" + (live ? " live" : "");
-    stamp.title = Plan.label(kind);
-    stamp.style.gridTemplateColumns = "repeat(" + shape.w + ", 9px)";
-    for (let k = 0; k < shape.w * shape.h; k++) {
-      stamp.appendChild(document.createElement("i"));
-    }
-    this.elTray.appendChild(stamp);
-  }
 };
 
 Ui.prototype.paintPlans = function (cards) {

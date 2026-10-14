@@ -20,7 +20,12 @@ function Game() {
   this.storyAfter = null;
   this.hold = null;
   this.preview = null;
+  this.selectedQ = null;
   this.origin = { x: 0, y: 0, cell: 32, rows: 6, cols: 6 };
+  this.trayH = 80;
+  this.tray = { h: 80, stamps: [] };
+  this.remAnchors = [];
+  this.stampHeldIndex = 0;
   this.bound = false;
   this.propMs = 60;
   this.actions = [];
@@ -144,6 +149,7 @@ Game.prototype.startOver = function () {
   this.storyQueue = [];
   this.storyAfter = null;
   this.clearHold();
+  this.preview = null;
   this.ui.hidePlan();
   this.ui.hideStory();
   this.ui.showStart();
@@ -218,12 +224,14 @@ Game.prototype.beginWave = function (plan) {
   this.grid = GridBuilder.build(this.plan);
   this.initial = this.grid.types();
   this.queue = this.plan.stamps.slice();
+  this.remAnchors = this.anchors.slice();
   this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
   this.lost = false;
   this.ended = null;
   this.elapsedMs = 0;
   this.clockOn = Date.now();
   this.clearHold();
+  this.preview = null;
   this.layout();
   this.persist();
   this.updateHud();
@@ -235,6 +243,8 @@ Game.prototype.restore = function (data) {
   this.initial = data.initial || this.grid.types();
   this.queue = Array.isArray(data.queue) ? data.queue.slice() : [];
   this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
+  this.remAnchors = Array.isArray(data.remAnchors) ? data.remAnchors.slice() : this.anchors.slice();
+  if (this.remAnchors.length !== this.queue.length) this.remAnchors = this.anchors.slice(0, this.queue.length);
   this.plan = Plan.copy(data.plan);
   this.wave = data.wave || this.plan.wave || this.wave;
   this.lost = !!data.lost;
@@ -252,11 +262,13 @@ Game.prototype.resetWave = function () {
   this.abortActions();
   this.grid.writeTypes(this.initial);
   this.queue = this.plan.stamps.slice();
+  this.remAnchors = this.anchors.slice();
   this.lost = false;
   this.ended = null;
   this.elapsedMs = 0;
   this.clockOn = Date.now();
   this.clearHold();
+  this.preview = null;
   this.persist();
   this.updateHud();
 };
@@ -265,6 +277,7 @@ Game.prototype.giveUp = function () {
   this.abortActions();
   this.pauseClock();
   this.clearHold();
+  this.preview = null;
   this.grid = null;
   this.ended = null;
   Save.clearBoard();
@@ -308,14 +321,31 @@ Game.prototype.dropAt = function (row, col) {
 Game.prototype.onHint = function () {
   if (!this.grid || this.ended || !this.queue.length || !this.plan || this.waiting()) return;
   if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
-  const index = this.plan.stamps.length - this.queue.length;
-  const seat = this.anchors[index];
-  if (!seat) return;
-  this.beginDrop(seat.row, seat.col, true);
+  let best = -1;
+  let bestScore = -1;
+  for (let i = 0; i < this.queue.length; i++) {
+    const seat = this.remAnchors[i];
+    if (!seat) continue;
+    const cells = Grid.footprint(this.grid.rows, this.grid.cols, this.queue[i], seat.row, seat.col);
+    let score = 0;
+    for (let k = 0; k < cells.length; k++) {
+      const cell = this.grid.at(cells[k].r, cells[k].c);
+      if (cell && cell.is("horde")) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  if (best < 0 || bestScore <= 0) return;
+  const seat = this.remAnchors[best];
+  this.beginDrop(seat.row, seat.col, true, best);
 };
 
-Game.prototype.beginDrop = function (row, col, hint) {
-  const kind = this.queue[0];
+Game.prototype.beginDrop = function (row, col, hint, qIndex) {
+  if (qIndex == null) qIndex = 0;
+  if (qIndex < 0 || qIndex >= this.queue.length) return;
+  const kind = this.queue[qIndex];
   const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, row, col);
   if (!cells.length) return;
   const have = {};
@@ -343,7 +373,10 @@ Game.prototype.beginDrop = function (row, col, hint) {
   if (!seeds.length) return;
   if (!this.enqueueProp(cells, seeds, hint, row, col)) return;
   this.stampHeld = true;
+  this.stampHeldIndex = qIndex;
+  this.preview = null;
   this.clearHold();
+  this.preview = null;
   this.persist();
   this.updateHud();
   this.kickActions();
@@ -569,8 +602,13 @@ Game.prototype.stepWave = function (action) {
 Game.prototype.settleStamp = function () {
   if (this.actions.length) return;
   if (this.stampHeld) {
-    this.queue.shift();
+    const i = this.stampHeldIndex | 0;
+    if (i >= 0 && i < this.queue.length) {
+      this.queue.splice(i, 1);
+      this.remAnchors.splice(i, 1);
+    }
     this.stampHeld = false;
+    this.stampHeldIndex = 0;
   }
   this.persist();
   this.updateHud();
@@ -592,8 +630,13 @@ Game.prototype.flushActions = function () {
   }
   this.actions = [];
   if (this.stampHeld) {
-    this.queue.shift();
+    const i = this.stampHeldIndex | 0;
+    if (i >= 0 && i < this.queue.length) {
+      this.queue.splice(i, 1);
+      this.remAnchors.splice(i, 1);
+    }
     this.stampHeld = false;
+    this.stampHeldIndex = 0;
   }
   if (this.grid && !this.queue.length) this.finish();
 };
@@ -614,44 +657,147 @@ Game.prototype.onDown = function (e) {
     if (hit) this.cycleCell(hit.row, hit.col);
     return;
   }
-  const hit = this.aim(e);
-  if (!hit) return;
-  this.clearHold();
-  this.hold = { pointerId: e.pointerId };
-  this.preview = { row: hit.row, col: hit.col, x: hit.x, y: hit.y };
+  const rect = this.ui.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const trayHit = this.hitTray(x, y);
+  const onGhost = this.preview && this.pointOnPreview(x, y);
+  this.hold = {
+    id: e.pointerId,
+    x0: x,
+    y0: y,
+    t0: Date.now(),
+    moved: false,
+    onPiece: !!onGhost,
+    trayIndex: trayHit ? trayHit.index : null,
+    placed: false,
+    grabDx: 0,
+    grabDy: 0,
+  };
+  if (trayHit) {
+    this.selectedQ = trayHit.index;
+  } else if (!this.preview && this.queue.length) {
+    this.setSelected(0);
+    const aim = this.aimAt(x, y, this.queue[0], e);
+    if (aim) {
+      this.preview.row = aim.row;
+      this.preview.col = aim.col;
+    }
+    this.hold.placed = true;
+  }
+  if (this.preview && this.hold.placed) {
+    const center = this.previewCenter();
+    if (center) {
+      this.hold.grabDx = x - center.x;
+      this.hold.grabDy = y - center.y;
+    }
+  }
   try {
     this.ui.canvas.setPointerCapture(e.pointerId);
   } catch (err) {}
 };
 
 Game.prototype.onMove = function (e) {
-  if (!this.hold || e.pointerId !== this.hold.pointerId) return;
-  const hit = this.aim(e);
-  if (!hit) return;
-  this.preview = { row: hit.row, col: hit.col, x: hit.x, y: hit.y };
+  if (!this.hold || e.pointerId !== this.hold.id) return;
+  const rect = this.ui.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const dx = x - this.hold.x0;
+  const dy = y - this.hold.y0;
+  if (dx * dx + dy * dy > 64) this.hold.moved = true;
+  if (this.hold.trayIndex != null && !this.hold.placed) {
+    const kind = this.queue[this.hold.trayIndex];
+    if (!kind) return;
+    const aim = this.aimAt(x, y, kind, e);
+    if (!aim) return;
+    this.preview = { qIndex: this.hold.trayIndex, row: aim.row, col: aim.col };
+    this.selectedQ = this.hold.trayIndex;
+    const center = this.previewCenter();
+    if (center) {
+      this.hold.grabDx = x - center.x;
+      this.hold.grabDy = y - center.y;
+    }
+    this.hold.placed = true;
+    return;
+  }
+  if (!this.hold.moved || !this.preview) return;
+  const kind = this.queue[this.preview.qIndex];
+  if (!kind) return;
+  const aim = this.aimAt(x - this.hold.grabDx, y - this.hold.grabDy, kind, null);
+  if (aim) {
+    this.preview.row = aim.row;
+    this.preview.col = aim.col;
+  }
 };
 
 Game.prototype.onUp = function (e) {
-  if (!this.hold || e.pointerId !== this.hold.pointerId) return;
-  const hit = this.aim(e);
-  const aim = hit || this.preview;
-  this.clearHold();
-  if (!hit || !aim) return;
-  this.dropAt(aim.row, aim.col);
+  if (!this.hold || e.pointerId !== this.hold.id) return;
+  const dt = Date.now() - this.hold.t0;
+  const trayIndex = this.hold.trayIndex;
+  const placed = this.hold.placed;
+  const isClick = !this.hold.moved && dt < 300 && this.hold.onPiece && this.preview;
+  this.hold = null;
+  if (trayIndex != null && !placed) {
+    this.preview = null;
+    this.selectedQ = trayIndex;
+    this.setSelected(trayIndex);
+    return;
+  }
+  if (isClick) this.dropSelected();
 };
 
 Game.prototype.clearHold = function () {
   this.hold = null;
-  this.preview = null;
 };
 
-Game.prototype.aim = function (e) {
-  if (!this.grid || !this.queue.length || this.waiting()) return null;
-  const shape = Grid.STAMP_DEFINITIONS[this.queue[0]];
+Game.prototype.setSelected = function (qIndex) {
+  if (qIndex < 0 || qIndex >= this.queue.length) return;
+  if (this.preview && this.preview.qIndex === qIndex) return;
+  const kind = this.queue[qIndex];
+  const shape = Grid.STAMP_DEFINITIONS[kind];
+  if (!shape) return;
+  function snap(center, size, n) {
+    if (size & 1) {
+      let i = Math.round(center - 0.5);
+      if (i < 0) i = 0;
+      if (i >= n) i = n - 1;
+      return i;
+    }
+    let line = Math.round(center);
+    if (line < 1) line = 1;
+    if (line > n - 1) line = n - 1;
+    return line - 0.5;
+  }
+  const centerR = this.grid.rows / 2;
+  const centerC = this.grid.cols / 2;
+  this.preview = {
+    qIndex: qIndex,
+    row: snap(centerR, shape.h, this.grid.rows),
+    col: snap(centerC, shape.w, this.grid.cols),
+  };
+  this.selectedQ = qIndex;
+};
+
+Game.prototype.previewCenter = function () {
+  if (!this.preview || !this.origin) return null;
+  const o = this.origin;
+  return {
+    x: o.x + (this.preview.col + 0.5) * o.cell,
+    y: o.y + (this.preview.row + 0.5) * o.cell,
+  };
+};
+
+Game.prototype.dropSelected = function () {
+  if (!this.preview || !this.queue.length) return;
+  const i = this.preview.qIndex;
+  if (i < 0 || i >= this.queue.length) return;
+  this.beginDrop(this.preview.row, this.preview.col, false, i);
+};
+
+Game.prototype.aimAt = function (x, y, kind, e) {
+  if (!this.grid || !kind) return null;
+  const shape = Grid.STAMP_DEFINITIONS[kind];
   if (!shape) return null;
-  const rect = this.ui.canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
   const o = this.origin;
   function axis(p, origin, n, size) {
     const local = (p - origin) / o.cell;
@@ -668,15 +814,22 @@ Game.prototype.aim = function (e) {
     return line - 0.5;
   }
   const col = axis(x, o.x, this.grid.cols, shape.w);
-  // Offset only for touch/pen so the bottom edge of the stamp sits at the pointer.
-  // Mouse keeps the unshifted center aim.
   let aimY = y;
-  if (e.pointerType !== "mouse") {
+  if (e && e.pointerType !== "mouse") {
     aimY = y - ((shape.h + 1) / 2) * o.cell;
   }
   const row = axis(aimY, o.y, this.grid.rows, shape.h);
   if (row === null || col === null) return null;
-  return { row: row, col: col, x: x, y: y };
+  return { row: row, col: col };
+};
+
+Game.prototype.aim = function (e) {
+  if (!this.preview || !this.queue.length) return null;
+  const kind = this.queue[this.preview.qIndex];
+  const rect = this.ui.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  return this.aimAt(x, y, kind, e);
 };
 
 Game.prototype.aimCell = function (e) {
@@ -717,18 +870,79 @@ Game.prototype.layout = function () {
   this.ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const rows = this.grid ? this.grid.rows : 6;
   const cols = this.grid ? this.grid.cols : 6;
+  const trayH = this.trayH;
   const availW = w - 12;
-  const availH = h - pad.top - pad.bot - 12;
+  const availH = h - trayH - pad.bot - 12;
   const cell = Math.max(8, Math.min(availW / cols, availH / rows));
   const boardW = cell * cols;
   const boardH = cell * rows;
   this.origin = {
     x: (w - boardW) / 2,
-    y: pad.top + (h - pad.top - pad.bot - boardH) / 2,
+    y: trayH + (h - trayH - pad.bot - boardH) / 2,
     cell: cell,
     rows: rows,
     cols: cols,
   };
+  this.layoutTray();
+};
+
+Game.prototype.layoutTray = function () {
+  const w = window.innerWidth;
+  const h = this.trayH;
+  const list = this.queue || [];
+  if (!list.length) {
+    this.tray = { h: h, stamps: [] };
+    return;
+  }
+  let unitsW = 0;
+  let maxH = 0;
+  const shapes = [];
+  for (let i = 0; i < list.length; i++) {
+    const s = Grid.STAMP_DEFINITIONS[list[i]] || { w: 1, h: 1 };
+    shapes.push(s);
+    unitsW += s.w;
+    if (s.h > maxH) maxH = s.h;
+  }
+  const gaps = Math.max(0, list.length - 1);
+  const pad = 8;
+  const cellByW = (w - pad * 2 - gaps * 6) / Math.max(1, unitsW);
+  const cellByH = (h - pad * 2) / Math.max(1, maxH);
+  const cell = Math.max(4, Math.min(cellByW, cellByH, 16));
+  const totalW = unitsW * cell + gaps * 6;
+  let x = (w - totalW) / 2;
+  const stamps = [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    const sw = s.w * cell;
+    const sh = s.h * cell;
+    const y = (h - sh) / 2;
+    stamps.push({ index: i, kind: list[i], x: x, y: y, w: sw, h: sh, cell: cell });
+    x += sw + 6;
+  }
+  this.tray = { h: h, cell: cell, stamps: stamps };
+};
+
+Game.prototype.hitTray = function (x, y) {
+  if (!this.tray || !this.tray.stamps) return null;
+  for (let i = 0; i < this.tray.stamps.length; i++) {
+    const s = this.tray.stamps[i];
+    if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) return s;
+  }
+  return null;
+};
+
+Game.prototype.pointOnPreview = function (x, y) {
+  if (!this.preview || !this.grid) return false;
+  const kind = this.queue[this.preview.qIndex];
+  if (!kind) return false;
+  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, this.preview.row, this.preview.col);
+  const o = this.origin;
+  for (let i = 0; i < cells.length; i++) {
+    const cx = o.x + cells[i].c * o.cell;
+    const cy = o.y + cells[i].r * o.cell;
+    if (x >= cx && x < cx + o.cell && y >= cy && y < cy + o.cell) return true;
+  }
+  return false;
 };
 
 Game.prototype.draw = function () {
@@ -737,7 +951,43 @@ Game.prototype.draw = function () {
   const h = window.innerHeight;
   ctx.fillStyle = "#171c14";
   ctx.fillRect(0, 0, w, h);
+  this.layoutTray();
+  this.drawTray(ctx);
   if (this.grid) this.drawBoard(ctx);
+};
+
+Game.prototype.drawTray = function (ctx) {
+  const h = this.trayH;
+  const w = window.innerWidth;
+  ctx.fillStyle = "#12160f";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#2a3324";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, h - 1);
+  ctx.lineTo(w, h - 1);
+  ctx.stroke();
+  const stamps = this.tray && this.tray.stamps ? this.tray.stamps : [];
+  const selected = this.selectedQ != null ? this.selectedQ : (this.preview ? this.preview.qIndex : 0);
+  for (let i = 0; i < stamps.length; i++) {
+    const s = stamps[i];
+    const live = s.index === selected;
+    ctx.fillStyle = "#1c2418";
+    ctx.fillRect(s.x - 2, s.y - 2, s.w + 4, s.h + 4);
+    ctx.fillStyle = "#e07a2f";
+    const cell = s.cell;
+    const shape = Grid.STAMP_DEFINITIONS[s.kind] || { w: 1, h: 1 };
+    for (let r = 0; r < shape.h; r++) {
+      for (let c = 0; c < shape.w; c++) {
+        ctx.fillRect(s.x + c * cell + 1, s.y + r * cell + 1, cell - 2, cell - 2);
+      }
+    }
+    if (live) {
+      ctx.strokeStyle = "#f2e27a";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x - 2, s.y - 2, s.w + 4, s.h + 4);
+    }
+  }
 };
 
 Game.prototype.loop = function () {
@@ -826,7 +1076,8 @@ Game.prototype.drawBoard = function (ctx) {
     }
   }
   if (!this.preview || !this.queue.length || this.waiting()) return;
-  const kind = this.queue[0];
+  const kind = this.queue[this.preview.qIndex];
+  if (!kind) return;
   const cells = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
   if (!cells.length) return;
   for (let i = 0; i < cells.length; i++) {
@@ -873,6 +1124,7 @@ Game.prototype.persist = function () {
     anchors: this.anchors,
     initial: this.initial,
     queue: this.queue.slice(),
+    remAnchors: this.remAnchors.slice(),
     plan: this.plan,
     wave: this.wave,
     lost: this.lost,
