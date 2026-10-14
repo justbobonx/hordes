@@ -73,11 +73,11 @@ button, a { font-family: inherit; }
 }
 
 .hud-mid {
-  flex: 1;
+  flex: 1 0 auto;
   text-align: center;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .hud-right {
@@ -254,36 +254,36 @@ h1 {
 
 .story-continue { color: #f2e27a; font-size: 22px; }
 
-/* Mobile: force wave+debug to its own line, then status and buttons below.
-   Buttons stay right-justified. Text wraps inside each section. */
-@media (max-width: 520px) {
+/* Narrow / mobile: force wave and status onto their own full-width lines
+   (no shrink) so text only wraps after the layout has already stacked.
+   Buttons follow on the next line, right-justified.
+   Base rules keep the status nowrap + no-shrink so the flex container
+   wraps the blocks before the message text itself wraps. */
+@media (max-width: 800px) {
   #hud-bottom {
     justify-content: flex-start;
     padding-left: 6px;
     padding-right: 6px;
     align-items: center;
   }
-  .hud-left {
-    flex: 1 1 100%;
+  .hud-left,
+  .hud-mid {
+    flex: 1 0 100%;
+    min-width: 100%;
     text-align: center;
     font-size: 24px;
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
-    order: 1;
   }
-  .hud-mid {
-    flex: 1 1 auto;
-    font-size: 24px;
-    text-align: left;
-    order: 2;
-    min-width: 0;
-  }
+  .hud-left { order: 1; }
+  .hud-mid { order: 2; }
   .hud-right {
     flex: 0 0 auto;
     justify-content: flex-end;
     margin-left: auto;
     order: 3;
+    width: 100%;
   }
   button {
     font-size: 22px;
