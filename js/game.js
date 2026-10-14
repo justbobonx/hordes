@@ -684,6 +684,8 @@ Game.prototype.onDown = function (e) {
       this.preview.col = aim.col;
     }
     this.hold.placed = true;
+  } else if (this.preview) {
+    this.hold.placed = true;
   }
   if (this.preview && this.hold.placed) {
     const center = this.previewCenter();
