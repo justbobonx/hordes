@@ -341,7 +341,7 @@ Game.prototype.beginDrop = function (row, col, hint) {
     seeds.push(candidates[i]);
   }
   if (!seeds.length) return;
-  if (!this.enqueueProp(cells, seeds, hint)) return;
+  if (!this.enqueueProp(cells, seeds, hint, row, col)) return;
   this.stampHeld = true;
   this.clearHold();
   this.persist();
@@ -349,8 +349,8 @@ Game.prototype.beginDrop = function (row, col, hint) {
   this.kickActions();
 };
 
-// cells and seeds are { r, c }. Seeds must sit in cells. Later effects call this from onCellLand.
-Game.prototype.enqueueProp = function (cells, seeds, hint) {
+// cells and seeds are { r, c, from? }. Seeds must sit in cells. from null means launch all dirs (anchor). Later effects call this from onCellLand.
+Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol) {
   if (!cells || !cells.length || !seeds || !seeds.length) return null;
   const have = {};
   for (let i = 0; i < cells.length; i++) have[cells[i].r + "," + cells[i].c] = cells[i];
@@ -360,7 +360,7 @@ Game.prototype.enqueueProp = function (cells, seeds, hint) {
     const key = seeds[i].r + "," + seeds[i].c;
     if (seen[key] || !have[key]) continue;
     seen[key] = true;
-    frontier.push(have[key]);
+    frontier.push({ r: seeds[i].r, c: seeds[i].c, from: seeds[i].from || null });
   }
   if (!frontier.length) return null;
   const action = {
@@ -372,6 +372,8 @@ Game.prototype.enqueueProp = function (cells, seeds, hint) {
     landed: {},
     stopped: false,
     done: false,
+    anchorRow: anchorRow,
+    anchorCol: anchorCol,
   };
   this.actions.push(action);
   return action;
@@ -380,7 +382,72 @@ Game.prototype.enqueueProp = function (cells, seeds, hint) {
 // Return { stop: true } to keep the wave from leaving this cell.
 // Set action.stopped to halt the wave after this generation.
 // enqueueProp from here to start another prop. The wait stays up until those drain.
-Game.prototype.onCellLand = function (action, r, c) {
+Game.prototype.onCellLand = function (action, r, c, wasBarrier, wasFuel, from) {
+  if (wasBarrier) return { stop: true };
+  if (wasFuel) {
+    const dirs = [
+      [-1, -1], // NW
+      [-1, 0],  // N
+      [-1, 1],  // NE
+      [0, 1],   // E
+      [1, 1],   // SE
+      [1, 0],   // S
+      [1, -1],  // SW
+      [0, -1],  // W
+    ];
+    let useFull = false;
+    let idx = -1;
+    if (action.anchorRow == null || action.anchorCol == null) {
+      useFull = true;
+    } else {
+      const dr = r - action.anchorRow;
+      const dc = c - action.anchorCol;
+      if (dr === 0 && dc === 0) {
+        useFull = true;
+      } else {
+        // snap to nearest octant by max dot product
+        let best = 0;
+        let bestDot = -Infinity;
+        const len = Math.sqrt(dr * dr + dc * dc);
+        for (let i = 0; i < dirs.length; i++) {
+          const dlen = Math.sqrt(dirs[i][0] * dirs[i][0] + dirs[i][1] * dirs[i][1]);
+          const dot = (dr * dirs[i][0] + dc * dirs[i][1]) / (len * dlen);
+          if (dot > bestDot) {
+            bestDot = dot;
+            best = i;
+          }
+        }
+        idx = best;
+      }
+    }
+    const extra = [];
+    const seeds = [];
+    if (useFull) {
+      for (let i = 0; i < dirs.length; i++) {
+        const rr = r + dirs[i][0];
+        const cc = c + dirs[i][1];
+        if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
+        extra.push({ r: rr, c: cc });
+        seeds.push({ r: rr, c: cc, from: dirs[i] });
+      }
+    } else if (idx >= 0) {
+      const offsets = [-2, -1, 0, 1, 2];
+      for (let k = 0; k < offsets.length; k++) {
+        const di = (idx + offsets[k] + 8) % 8;
+        const ddr = dirs[di][0];
+        const ddc = dirs[di][1];
+        const rr = r + ddr;
+        const cc = c + ddc;
+        if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
+        extra.push({ r: rr, c: cc });
+        seeds.push({ r: rr, c: cc, from: [ddr, ddc] });
+      }
+    }
+    if (extra.length) {
+      this.enqueueProp(extra, seeds, action.hint, action.anchorRow, action.anchorCol);
+    }
+    return { stop: true };
+  }
   return null;
 };
 
@@ -411,12 +478,40 @@ Game.prototype.landCell = function (action, hit) {
   const key = hit.r + "," + hit.c;
   if (action.landed[key]) return null;
   action.landed[key] = true;
+  const cell = this.grid.at(hit.r, hit.c);
+  const wasBarrier = cell && cell.is("barrier");
+  const wasFuel = cell && cell.is("fuel");
   if (this.grid.apply([hit])) this.lost = true;
   if (action.hint) {
-    const cell = this.grid.at(hit.r, hit.c);
-    if (cell && cell.is("cleared")) cell.setType("cleared_hint");
+    const after = this.grid.at(hit.r, hit.c);
+    if (after && after.is("cleared")) after.setType("cleared_hint");
   }
-  return this.onCellLand(action, hit.r, hit.c);
+  if (wasBarrier) {
+    if (!action.walls) action.walls = {};
+    action.walls[key] = true;
+  }
+  const result = this.onCellLand(action, hit.r, hit.c, wasBarrier, wasFuel, hit.from);
+  return result;
+};
+
+Game.prototype.losBlocked = function (action, tr, tc) {
+  if (action.anchorRow == null || action.anchorCol == null) return false;
+  const ar = action.anchorRow;
+  const ac = action.anchorCol;
+  // Simple grid line from anchor (may be *.5) to target cell center
+  const steps = Math.max(Math.abs(tr - ar), Math.abs(tc - ac)) * 2 + 1;
+  if (steps < 2) return false;
+  for (let s = 1; s < steps; s++) {
+    const t = s / steps;
+    const rr = Math.round(ar + (tr - ar) * t);
+    const cc = Math.round(ac + (tc - ac) * t);
+    if (rr === tr && cc === tc) continue;
+    const key = rr + "," + cc;
+    if (action.walls && action.walls[key]) return true;
+    const cell = this.grid.at(rr, cc);
+    if (cell && cell.is("barrier")) return true;
+  }
+  return false;
 };
 
 Game.prototype.stepWave = function (action) {
@@ -433,21 +528,38 @@ Game.prototype.stepWave = function (action) {
   }
   const next = [];
   const nextSeen = {};
-  const dirs = [
-    [-1, 0],
-    [1, 0],
-    [0, -1],
-    [0, 1],
+  const allDirs = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1],
   ];
   for (let i = 0; i < spreaders.length; i++) {
     const hit = spreaders[i];
-    for (let d = 0; d < dirs.length; d++) {
-      const rr = hit.r + dirs[d][0];
-      const cc = hit.c + dirs[d][1];
+    for (let d = 0; d < allDirs.length; d++) {
+      const dr = allDirs[d][0];
+      const dc = allDirs[d][1];
+      const rr = hit.r + dr;
+      const cc = hit.c + dc;
       const nkey = rr + "," + cc;
       if (!action.have[nkey] || action.landed[nkey] || nextSeen[nkey]) continue;
+      // Diagonal corner block
+      if (dr !== 0 && dc !== 0) {
+        const o1r = hit.r + dr;
+        const o1c = hit.c;
+        const o2r = hit.r;
+        const o2c = hit.c + dc;
+        const o1key = o1r + "," + o1c;
+        const o2key = o2r + "," + o2c;
+        const ortho1 = this.grid.at(o1r, o1c);
+        const ortho2 = this.grid.at(o2r, o2c);
+        const blocked1 = (action.walls && action.walls[o1key]) || (ortho1 && ortho1.is("barrier"));
+        const blocked2 = (action.walls && action.walls[o2key]) || (ortho2 && ortho2.is("barrier"));
+        if (blocked1 || blocked2) continue;
+      }
+      // Radial shadow: skip if line-of-sight from anchor crosses a barrier
+      if (this.losBlocked(action, rr, cc)) continue;
       nextSeen[nkey] = true;
-      next.push(action.have[nkey]);
+      next.push({ r: rr, c: cc, from: [dr, dc] });
     }
   }
   if (!next.length) action.done = true;
@@ -497,6 +609,11 @@ Game.prototype.onDown = function (e) {
   if (!this.grid || this.ended || this.waiting()) return;
   if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
   e.preventDefault();
+  if (e.shiftKey) {
+    const hit = this.aimCell(e);
+    if (hit) this.cycleCell(hit.row, hit.col);
+    return;
+  }
   const hit = this.aim(e);
   if (!hit) return;
   this.clearHold();
@@ -560,6 +677,30 @@ Game.prototype.aim = function (e) {
   const row = axis(aimY, o.y, this.grid.rows, shape.h);
   if (row === null || col === null) return null;
   return { row: row, col: col, x: x, y: y };
+};
+
+Game.prototype.aimCell = function (e) {
+  if (!this.grid) return null;
+  const rect = this.ui.canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const o = this.origin;
+  const col = Math.floor((x - o.x) / o.cell);
+  const row = Math.floor((y - o.y) / o.cell);
+  if (row < 0 || col < 0 || row >= this.grid.rows || col >= this.grid.cols) return null;
+  return { row: row, col: col };
+};
+
+Game.prototype.cycleCell = function (row, col) {
+  const cell = this.grid.at(row, col);
+  if (!cell) return;
+  const order = ["grass", "horde", "city", "barrier", "fuel"];
+  let i = order.indexOf(cell.type);
+  if (i < 0) i = 0;
+  const next = order[(i + 1) % order.length];
+  cell.setType(next);
+  this.grid.dress();
+  this.persist();
 };
 
 Game.prototype.layout = function () {
@@ -743,3 +884,4 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+

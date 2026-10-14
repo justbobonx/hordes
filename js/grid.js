@@ -84,6 +84,8 @@ Grid.prototype.apply = function (cells) {
       cell.setType("ruined");
       ruined = true;
     } else if (cell.is("grass")) cell.setType("scorched");
+    else if (cell.is("barrier")) cell.setType("grass");
+    else if (cell.is("fuel")) cell.setType("scorched");
   }
   this.dress();
   return ruined;
