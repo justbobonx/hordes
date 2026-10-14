@@ -371,7 +371,9 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
     seeds.push(candidates[i]);
   }
   if (!seeds.length) return;
-  if (!this.enqueueProp(cells, seeds, hint, row, col)) return;
+  const pruned = this.reachable(cells, seeds, row, col);
+  if (!pruned.length) return;
+  if (!this.enqueueProp(pruned, seeds, hint, row, col)) return;
   this.stampHeld = true;
   this.stampHeldIndex = qIndex;
   this.preview = null;
@@ -380,6 +382,113 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
   this.persist();
   this.updateHud();
   this.kickActions();
+};
+
+
+// Compute cells reachable from seeds inside candidateCells.
+// Barriers are included (destroyed) but do not spread.
+// Diagonal steps are blocked if either ortho is a barrier.
+// Returns array of {r,c}. Boom step never sees barriers.
+Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol) {
+  if (!candidateCells || !candidateCells.length || !seeds || !seeds.length) return [];
+  const have = {};
+  for (let i = 0; i < candidateCells.length; i++) {
+    const k = candidateCells[i].r + "," + candidateCells[i].c;
+    have[k] = true;
+  }
+
+  // Shadow: seed with barrier's in-cone neighbors, then flow outward inside the 45° cone.
+  const shadowed = {};
+  if (anchorRow != null && anchorCol != null) {
+    const dirs8 = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    for (let i = 0; i < candidateCells.length; i++) {
+      const br = candidateCells[i].r;
+      const bc = candidateCells[i].c;
+      const bcell = this.grid.at(br, bc);
+      if (!bcell || !bcell.is("barrier")) continue;
+      const adr = br - anchorRow;
+      const adc = bc - anchorCol;
+      const alen2 = adr * adr + adc * adc;
+      if (alen2 < 0.01) continue;
+      function inCone(rr, cc) {
+        const ddr = rr - br;
+        const ddc = cc - bc;
+        const parallel = adr * ddr + adc * ddc;
+        if (parallel <= 0) return false;
+        const cross = adr * ddc - adc * ddr;
+        return Math.abs(cross) <= parallel; // angle <= 45°
+      }
+      const q = [];
+      const seen = {};
+      // pass 1: immediate neighbors in the cone
+      for (let d = 0; d < dirs8.length; d++) {
+        const rr = br + dirs8[d][0];
+        const cc = bc + dirs8[d][1];
+        const nk = rr + "," + cc;
+        if (!have[nk] || !inCone(rr, cc)) continue;
+        seen[nk] = true;
+        shadowed[nk] = true;
+        q.push({ r: rr, c: cc, par: adr * (rr - br) + adc * (cc - bc) });
+      }
+      // later passes: flow to cells with strictly greater parallel, still in cone
+      while (q.length) {
+        const cur = q.shift();
+        for (let d = 0; d < dirs8.length; d++) {
+          const rr = cur.r + dirs8[d][0];
+          const cc = cur.c + dirs8[d][1];
+          const nk = rr + "," + cc;
+          if (seen[nk] || !have[nk] || !inCone(rr, cc)) continue;
+          const par = adr * (rr - br) + adc * (cc - bc);
+          if (par <= cur.par) continue; // must move further along away axis
+          seen[nk] = true;
+          shadowed[nk] = true;
+          q.push({ r: rr, c: cc, par: par });
+        }
+      }
+    }
+  }
+
+  const landed = {};
+  const result = [];
+  const frontier = [];
+  const seenSeed = {};
+  for (let i = 0; i < seeds.length; i++) {
+    const k = seeds[i].r + "," + seeds[i].c;
+    if (seenSeed[k] || !have[k] || shadowed[k]) continue;
+    seenSeed[k] = true;
+    frontier.push({ r: seeds[i].r, c: seeds[i].c });
+  }
+  const allDirs = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1],
+  ];
+  while (frontier.length) {
+    const next = [];
+    const nextSeen = {};
+    for (let i = 0; i < frontier.length; i++) {
+      const hit = frontier[i];
+      const key = hit.r + "," + hit.c;
+      if (landed[key]) continue;
+      landed[key] = true;
+      result.push({ r: hit.r, c: hit.c });
+      const hitCell = this.grid.at(hit.r, hit.c);
+      if (hitCell && hitCell.is("barrier")) continue; // land + destroy, do not spread
+      for (let d = 0; d < allDirs.length; d++) {
+        const dr = allDirs[d][0];
+        const dc = allDirs[d][1];
+        const rr = hit.r + dr;
+        const cc = hit.c + dc;
+        const nkey = rr + "," + cc;
+        if (!have[nkey] || landed[nkey] || nextSeen[nkey] || shadowed[nkey]) continue;
+        nextSeen[nkey] = true;
+        next.push({ r: rr, c: cc });
+      }
+    }
+    frontier.length = 0;
+    for (let i = 0; i < next.length; i++) frontier.push(next[i]);
+  }
+  return result;
 };
 
 // cells and seeds are { r, c, from? }. Seeds must sit in cells. from null means launch all dirs (anchor). Later effects call this from onCellLand.
@@ -415,8 +524,7 @@ Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol)
 // Return { stop: true } to keep the wave from leaving this cell.
 // Set action.stopped to halt the wave after this generation.
 // enqueueProp from here to start another prop. The wait stays up until those drain.
-Game.prototype.onCellLand = function (action, r, c, wasBarrier, wasFuel, from) {
-  if (wasBarrier) return { stop: true };
+Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   if (wasFuel) {
     const dirs = [
       [-1, -1], // NW
@@ -477,7 +585,10 @@ Game.prototype.onCellLand = function (action, r, c, wasBarrier, wasFuel, from) {
       }
     }
     if (extra.length) {
-      this.enqueueProp(extra, seeds, action.hint, action.anchorRow, action.anchorCol);
+      const pruned = this.reachable(extra, seeds, action.anchorRow, action.anchorCol);
+      if (pruned.length) {
+        this.enqueueProp(pruned, seeds, action.hint, action.anchorRow, action.anchorCol);
+      }
     }
     return { stop: true };
   }
@@ -512,39 +623,14 @@ Game.prototype.landCell = function (action, hit) {
   if (action.landed[key]) return null;
   action.landed[key] = true;
   const cell = this.grid.at(hit.r, hit.c);
-  const wasBarrier = cell && cell.is("barrier");
   const wasFuel = cell && cell.is("fuel");
   if (this.grid.apply([hit])) this.lost = true;
   if (action.hint) {
     const after = this.grid.at(hit.r, hit.c);
     if (after && after.is("cleared")) after.setType("cleared_hint");
   }
-  if (wasBarrier) {
-    if (!action.walls) action.walls = {};
-    action.walls[key] = true;
-  }
-  const result = this.onCellLand(action, hit.r, hit.c, wasBarrier, wasFuel, hit.from);
+  const result = this.onCellLand(action, hit.r, hit.c, wasFuel, hit.from);
   return result;
-};
-
-Game.prototype.losBlocked = function (action, tr, tc) {
-  if (action.anchorRow == null || action.anchorCol == null) return false;
-  const ar = action.anchorRow;
-  const ac = action.anchorCol;
-  // Simple grid line from anchor (may be *.5) to target cell center
-  const steps = Math.max(Math.abs(tr - ar), Math.abs(tc - ac)) * 2 + 1;
-  if (steps < 2) return false;
-  for (let s = 1; s < steps; s++) {
-    const t = s / steps;
-    const rr = Math.round(ar + (tr - ar) * t);
-    const cc = Math.round(ac + (tc - ac) * t);
-    if (rr === tr && cc === tc) continue;
-    const key = rr + "," + cc;
-    if (action.walls && action.walls[key]) return true;
-    const cell = this.grid.at(rr, cc);
-    if (cell && cell.is("barrier")) return true;
-  }
-  return false;
 };
 
 Game.prototype.stepWave = function (action) {
@@ -575,22 +661,6 @@ Game.prototype.stepWave = function (action) {
       const cc = hit.c + dc;
       const nkey = rr + "," + cc;
       if (!action.have[nkey] || action.landed[nkey] || nextSeen[nkey]) continue;
-      // Diagonal corner block
-      if (dr !== 0 && dc !== 0) {
-        const o1r = hit.r + dr;
-        const o1c = hit.c;
-        const o2r = hit.r;
-        const o2c = hit.c + dc;
-        const o1key = o1r + "," + o1c;
-        const o2key = o2r + "," + o2c;
-        const ortho1 = this.grid.at(o1r, o1c);
-        const ortho2 = this.grid.at(o2r, o2c);
-        const blocked1 = (action.walls && action.walls[o1key]) || (ortho1 && ortho1.is("barrier"));
-        const blocked2 = (action.walls && action.walls[o2key]) || (ortho2 && ortho2.is("barrier"));
-        if (blocked1 || blocked2) continue;
-      }
-      // Radial shadow: skip if line-of-sight from anchor crosses a barrier
-      if (this.losBlocked(action, rr, cc)) continue;
       nextSeen[nkey] = true;
       next.push({ r: rr, c: cc, from: [dr, dc] });
     }
@@ -1064,8 +1134,8 @@ Game.prototype.drawBoard = function (ctx) {
     }
   }
   ctx.strokeStyle = "#f2e27a";
-  ctx.lineWidth = Math.max(2, o.cell * 0.05);
-  const inset = Math.max(2, o.cell * 0.04);
+  ctx.lineWidth = Math.max(2, o.cell * 0.07);
+  const inset = Math.max(2, o.cell * 0.05);
   for (let a = 0; a < this.actions.length; a++) {
     const action = this.actions[a];
     if (action.type !== "wave") continue;
@@ -1080,13 +1150,107 @@ Game.prototype.drawBoard = function (ctx) {
   if (!this.preview || !this.queue.length || this.waiting()) return;
   const kind = this.queue[this.preview.qIndex];
   if (!kind) return;
-  const cells = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
-  if (!cells.length) return;
-  for (let i = 0; i < cells.length; i++) {
-    const x = o.x + cells[i].c * o.cell;
-    const y = o.y + cells[i].r * o.cell;
+  const raw = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
+  if (!raw.length) return;
+  // Seeds for primary (same logic as beginDrop)
+  const have = {};
+  for (let i = 0; i < raw.length; i++) have[raw[i].r + "," + raw[i].c] = true;
+  const row = this.preview.row;
+  const col = this.preview.col;
+  const rowHalf = row !== Math.floor(row);
+  const colHalf = col !== Math.floor(col);
+  const r0 = rowHalf ? Math.floor(row) : row;
+  const c0 = colHalf ? Math.floor(col) : col;
+  const r1 = rowHalf ? r0 + 1 : r0;
+  const c1 = colHalf ? c0 + 1 : c0;
+  const candidates = [{ r: r0, c: c0 }, { r: r0, c: c1 }, { r: r1, c: c0 }, { r: r1, c: c1 }];
+  const seeds = [];
+  const seen = {};
+  for (let i = 0; i < candidates.length; i++) {
+    const key = candidates[i].r + "," + candidates[i].c;
+    if (seen[key] || !have[key]) continue;
+    seen[key] = true;
+    seeds.push(candidates[i]);
+  }
+  const primary = this.reachable(raw, seeds, row, col);
+  // Yellow: primary reachable
+  for (let i = 0; i < primary.length; i++) {
+    const x = o.x + primary[i].c * o.cell;
+    const y = o.y + primary[i].r * o.cell;
     ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
   }
+  // Orange: fuel secondaries (including the fuel cell itself), smaller box
+  const orangeInset = Math.max(6, o.cell * 0.18);
+  const fuelSeen = {};
+  const queue = [];
+  for (let i = 0; i < primary.length; i++) {
+    const cell = this.grid.at(primary[i].r, primary[i].c);
+    if (cell && cell.is("fuel")) queue.push(primary[i]);
+  }
+  while (queue.length) {
+    const fuel = queue.shift();
+    const fk = fuel.r + "," + fuel.c;
+    if (fuelSeen[fk]) continue;
+    fuelSeen[fk] = true;
+    // Build cone exactly as onCellLand
+    const dirs = [[-1,-1],[-1,0],[-1,1],[0,1],[1,1],[1,0],[1,-1],[0,-1]];
+    let useFull = false;
+    let idx = -1;
+    if (row == null || col == null) useFull = true;
+    else {
+      const dr = fuel.r - row;
+      const dc = fuel.c - col;
+      if (dr === 0 && dc === 0) useFull = true;
+      else {
+        let best = 0, bestDot = -Infinity;
+        const len = Math.sqrt(dr * dr + dc * dc);
+        for (let i = 0; i < dirs.length; i++) {
+          const dlen = Math.sqrt(dirs[i][0]*dirs[i][0] + dirs[i][1]*dirs[i][1]);
+          const dot = (dr * dirs[i][0] + dc * dirs[i][1]) / (len * dlen);
+          if (dot > bestDot) { bestDot = dot; best = i; }
+        }
+        idx = best;
+      }
+    }
+    const extra = [];
+    const fseeds = [];
+    if (useFull) {
+      for (let i = 0; i < dirs.length; i++) {
+        const rr = fuel.r + dirs[i][0];
+        const cc = fuel.c + dirs[i][1];
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        extra.push({ r: rr, c: cc });
+        fseeds.push({ r: rr, c: cc });
+      }
+    } else if (idx >= 0) {
+      const offsets = [-2, -1, 0, 1, 2];
+      for (let k = 0; k < offsets.length; k++) {
+        const di = (idx + offsets[k] + 8) % 8;
+        const rr = fuel.r + dirs[di][0];
+        const cc = fuel.c + dirs[di][1];
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        extra.push({ r: rr, c: cc });
+        fseeds.push({ r: rr, c: cc });
+      }
+    }
+    const secondary = this.reachable(extra, fseeds, row, col);
+    // Include the fuel cell itself in the orange set
+    const orange = [{ r: fuel.r, c: fuel.c }].concat(secondary);
+    const oseen = {};
+    for (let i = 0; i < orange.length; i++) {
+      const ok = orange[i].r + "," + orange[i].c;
+      if (oseen[ok]) continue;
+      oseen[ok] = true;
+      const x = o.x + orange[i].c * o.cell;
+      const y = o.y + orange[i].r * o.cell;
+      ctx.strokeStyle = "#e07a2f";
+      ctx.strokeRect(x + orangeInset, y + orangeInset, o.cell - orangeInset * 2, o.cell - orangeInset * 2);
+      // Chain: any new fuel in this secondary
+      const ncell = this.grid.at(orange[i].r, orange[i].c);
+      if (ncell && ncell.is("fuel") && !fuelSeen[ok]) queue.push(orange[i]);
+    }
+  }
+  ctx.strokeStyle = "#f2e27a";
   const ax = o.x + (this.preview.col + 0.5) * o.cell;
   const ay = o.y + (this.preview.row + 0.5) * o.cell;
   const m = o.cell * 0.16;
