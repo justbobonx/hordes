@@ -670,6 +670,9 @@ Game.prototype.settleStamp = function () {
     this.stampHeld = false;
     this.stampHeldIndex = 0;
   }
+  // Reset highlight to default next piece (rightmost / index 0)
+  this.selectedQ = this.queue.length ? 0 : null;
+  this.preview = null;
   this.persist();
   this.updateHud();
   if (!this.queue.length) this.finish();
@@ -698,6 +701,9 @@ Game.prototype.flushActions = function () {
     this.stampHeld = false;
     this.stampHeldIndex = 0;
   }
+  // Reset highlight to default next piece (rightmost / index 0)
+  this.selectedQ = this.queue.length ? 0 : null;
+  this.preview = null;
   if (this.grid && !this.queue.length) this.finish();
 };
 
@@ -744,6 +750,7 @@ Game.prototype.onDown = function (e) {
       this.preview.col = aim.col;
     }
     this.hold.placed = true;
+    this.hold.justStarted = true;
   } else if (this.preview) {
     this.hold.placed = true;
   }
@@ -797,6 +804,7 @@ Game.prototype.onUp = function (e) {
   const dt = Date.now() - this.hold.t0;
   const trayIndex = this.hold.trayIndex;
   const placed = this.hold.placed;
+  const justStarted = !!this.hold.justStarted;
   const isClick = !this.hold.moved && dt < 300 && this.preview;
   this.hold = null;
   if (trayIndex != null && !placed) {
@@ -805,7 +813,8 @@ Game.prototype.onUp = function (e) {
     this.setSelected(trayIndex);
     return;
   }
-  if (isClick) this.dropSelected();
+  // Aim-start gesture must not also count as the drop click
+  if (isClick && !justStarted) this.dropSelected();
 };
 
 Game.prototype.clearHold = function () {
@@ -1299,5 +1308,6 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 
 
