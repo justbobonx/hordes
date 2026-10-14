@@ -532,7 +532,6 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
       [1, -1],  [1, 0],  [1, 1]
     ];
     let extra = [];
-    let seeds = [];
     if (action.anchorRow == null || action.anchorCol == null) {
       // no anchor: full centered 3x3
       for (let dr = -1; dr <= 1; dr++) {
@@ -542,7 +541,6 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
           const cc = c + dc;
           if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
           extra.push({ r: rr, c: cc });
-          seeds.push({ r: rr, c: cc, from: [dr, dc] });
         }
       }
     } else {
@@ -570,17 +568,23 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
           if (rr === r && cc === c) continue;
           if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
           extra.push({ r: rr, c: cc });
-          seeds.push({ r: rr, c: cc, from: [ddr, ddc] });
         }
       }
     }
     if (extra.length) {
-      const pruned = this.reachable(extra, seeds, action.anchorRow, action.anchorCol);
-      if (pruned.length) {
-        this.enqueueProp(pruned, seeds, action.hint, action.anchorRow, action.anchorCol);
+      const candidates = extra.slice();
+      candidates.push({ r: r, c: c });
+      const fuelSeed = [{ r: r, c: c }];
+      const pruned = this.reachable(candidates, fuelSeed, r, c);
+      for (let i = 0; i < pruned.length; i++) {
+        const cell = pruned[i];
+        if (cell.r === r && cell.c === c) continue;
+        const key = cell.r + "," + cell.c;
+        if (action.have[key]) continue;
+        action.have[key] = cell;
+        action.cells.push(cell);
       }
     }
-    return { stop: true };
   }
   return null;
 };
@@ -1308,6 +1312,7 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 
 
 
