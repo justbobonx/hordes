@@ -526,62 +526,52 @@ Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol)
 // enqueueProp from here to start another prop. The wait stays up until those drain.
 Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   if (wasFuel) {
-    const dirs = [
-      [-1, -1], // NW
-      [-1, 0],  // N
-      [-1, 1],  // NE
-      [0, 1],   // E
-      [1, 1],   // SE
-      [1, 0],   // S
-      [1, -1],  // SW
-      [0, -1],  // W
+    const DIRS8 = [
+      [-1, -1], [-1, 0], [-1, 1],
+      [0, -1],           [0, 1],
+      [1, -1],  [1, 0],  [1, 1]
     ];
-    let useFull = false;
-    let idx = -1;
+    let extra = [];
+    let seeds = [];
     if (action.anchorRow == null || action.anchorCol == null) {
-      useFull = true;
+      // no anchor: full centered 3x3
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
+          extra.push({ r: rr, c: cc });
+          seeds.push({ r: rr, c: cc, from: [dr, dc] });
+        }
+      }
     } else {
       const dr = r - action.anchorRow;
       const dc = c - action.anchorCol;
-      if (dr === 0 && dc === 0) {
-        useFull = true;
-      } else {
-        // snap to nearest octant by max dot product
-        let best = 0;
-        let bestDot = -Infinity;
-        const len = Math.sqrt(dr * dr + dc * dc);
-        for (let i = 0; i < dirs.length; i++) {
-          const dlen = Math.sqrt(dirs[i][0] * dirs[i][0] + dirs[i][1] * dirs[i][1]);
-          const dot = (dr * dirs[i][0] + dc * dirs[i][1]) / (len * dlen);
-          if (dot > bestDot) {
-            bestDot = dot;
-            best = i;
-          }
+      let bestDir = 0;
+      let bestDot = -Infinity;
+      const len = Math.sqrt(dr * dr + dc * dc) || 1;
+      for (let d = 0; d < DIRS8.length; d++) {
+        const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
+        const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
+        if (dot > bestDot) {
+          bestDot = dot;
+          bestDir = d;
         }
-        idx = best;
       }
-    }
-    const extra = [];
-    const seeds = [];
-    if (useFull) {
-      for (let i = 0; i < dirs.length; i++) {
-        const rr = r + dirs[i][0];
-        const cc = c + dirs[i][1];
-        if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
-        extra.push({ r: rr, c: cc });
-        seeds.push({ r: rr, c: cc, from: dirs[i] });
-      }
-    } else if (idx >= 0) {
-      const offsets = [-2, -1, 0, 1, 2];
-      for (let k = 0; k < offsets.length; k++) {
-        const di = (idx + offsets[k] + 8) % 8;
-        const ddr = dirs[di][0];
-        const ddc = dirs[di][1];
-        const rr = r + ddr;
-        const cc = c + ddc;
-        if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
-        extra.push({ r: rr, c: cc });
-        seeds.push({ r: rr, c: cc, from: [ddr, ddc] });
+      const outDir = DIRS8[bestDir];
+      const rel = [-outDir[0], -outDir[1]];
+      const centerR = r - rel[0];
+      const centerC = c - rel[1];
+      for (let ddr = -1; ddr <= 1; ddr++) {
+        for (let ddc = -1; ddc <= 1; ddc++) {
+          const rr = Math.round(centerR + ddr);
+          const cc = Math.round(centerC + ddc);
+          if (rr === r && cc === c) continue;
+          if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
+          extra.push({ r: rr, c: cc });
+          seeds.push({ r: rr, c: cc, from: [ddr, ddc] });
+        }
       }
     }
     if (extra.length) {
@@ -1192,45 +1182,52 @@ Game.prototype.drawBoard = function (ctx) {
     const fk = fuel.r + "," + fuel.c;
     if (fuelSeen[fk]) continue;
     fuelSeen[fk] = true;
-    // Build cone exactly as onCellLand
-    const dirs = [[-1,-1],[-1,0],[-1,1],[0,1],[1,1],[1,0],[1,-1],[0,-1]];
-    let useFull = false;
-    let idx = -1;
-    if (row == null || col == null) useFull = true;
-    else {
+    // Build offset 3x3 exactly as onCellLand
+    const DIRS8 = [
+      [-1, -1], [-1, 0], [-1, 1],
+      [0, -1],           [0, 1],
+      [1, -1],  [1, 0],  [1, 1]
+    ];
+    let extra = [];
+    let fseeds = [];
+    if (row == null || col == null) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const rr = fuel.r + dr;
+          const cc = fuel.c + dc;
+          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+          extra.push({ r: rr, c: cc });
+          fseeds.push({ r: rr, c: cc });
+        }
+      }
+    } else {
       const dr = fuel.r - row;
       const dc = fuel.c - col;
-      if (dr === 0 && dc === 0) useFull = true;
-      else {
-        let best = 0, bestDot = -Infinity;
-        const len = Math.sqrt(dr * dr + dc * dc);
-        for (let i = 0; i < dirs.length; i++) {
-          const dlen = Math.sqrt(dirs[i][0]*dirs[i][0] + dirs[i][1]*dirs[i][1]);
-          const dot = (dr * dirs[i][0] + dc * dirs[i][1]) / (len * dlen);
-          if (dot > bestDot) { bestDot = dot; best = i; }
+      let bestDir = 0;
+      let bestDot = -Infinity;
+      const len = Math.sqrt(dr * dr + dc * dc) || 1;
+      for (let d = 0; d < DIRS8.length; d++) {
+        const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
+        const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
+        if (dot > bestDot) {
+          bestDot = dot;
+          bestDir = d;
         }
-        idx = best;
       }
-    }
-    const extra = [];
-    const fseeds = [];
-    if (useFull) {
-      for (let i = 0; i < dirs.length; i++) {
-        const rr = fuel.r + dirs[i][0];
-        const cc = fuel.c + dirs[i][1];
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-        extra.push({ r: rr, c: cc });
-        fseeds.push({ r: rr, c: cc });
-      }
-    } else if (idx >= 0) {
-      const offsets = [-2, -1, 0, 1, 2];
-      for (let k = 0; k < offsets.length; k++) {
-        const di = (idx + offsets[k] + 8) % 8;
-        const rr = fuel.r + dirs[di][0];
-        const cc = fuel.c + dirs[di][1];
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-        extra.push({ r: rr, c: cc });
-        fseeds.push({ r: rr, c: cc });
+      const outDir = DIRS8[bestDir];
+      const rel = [-outDir[0], -outDir[1]];
+      const centerR = fuel.r - rel[0];
+      const centerC = fuel.c - rel[1];
+      for (let ddr = -1; ddr <= 1; ddr++) {
+        for (let ddc = -1; ddc <= 1; ddc++) {
+          const rr = Math.round(centerR + ddr);
+          const cc = Math.round(centerC + ddc);
+          if (rr === fuel.r && cc === fuel.c) continue;
+          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+          extra.push({ r: rr, c: cc });
+          fseeds.push({ r: rr, c: cc });
+        }
       }
     }
     const secondary = this.reachable(extra, fseeds, row, col);
@@ -1302,4 +1299,5 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 

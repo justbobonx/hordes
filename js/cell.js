@@ -13,7 +13,7 @@ const CELL_TYPES = {
   cleared_hint: { fill: "#3b7540", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   ruined: { fill: "#556787", mark: "#2a2a2a", group: true, round: 1, vary: "group", varyAmount: 0.05 },
   barrier: { fill: "#8a6a3a", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.04 },
-  fuel: { fill: "#e8a317", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.12 },
+  fuel: { fill: "#e8a317", mark: null, group: false, round: 2, vary: "pulse", varyAmount: 0.08 },
 };
 
 function hexToRgb(hex) {

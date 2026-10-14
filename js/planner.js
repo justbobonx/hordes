@@ -2,19 +2,24 @@
 
 function Planner() {}
 
+const EXTRAS_UNLOCK = {
+  fuel: { minlevel: 20, onPlan: 0.5, range: [0.2, 0.5] },
+  // barrier
+};
+
 Planner.INTRO = {
-  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin:0 },
-  2: { cols: 6, rows: 7, stamps: ["33"], open: "clipped", thin:0 },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "edge", thin:0 },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", thin:0 },
-  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", thin:0 },
+  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin: 0 },
+  2: { cols: 6, rows: 7, stamps: ["33"], open: "clipped", thin: 0 },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "edge", thin: 0 },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", thin: 0 },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", thin: 0 },
 };
 
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
   const scripted = Planner.INTRO[w];
   if (scripted) {
-    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open, thin:scripted.thin }), locked: false }];
+    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open, thin: scripted.thin, fuelChance: 0 }), locked: false }];
   }
   let base = 4;
   let hold = 3;
@@ -66,6 +71,12 @@ Planner.offer = function (wave) {
     rows = cols + delta;
     if (rows < minR) rows = minR;
   }
+  let fuelChance = 0;
+  if (w >= EXTRAS_UNLOCK.fuel.minlevel && Math.random() < EXTRAS_UNLOCK.fuel.onPlan) {
+    const lo = EXTRAS_UNLOCK.fuel.range[0];
+    const hi = EXTRAS_UNLOCK.fuel.range[1];
+    fuelChance = lo + Math.random() * (hi - lo);
+  }
   return [{
     plan: Plan.copy({
       wave: w,
@@ -73,13 +84,11 @@ Planner.offer = function (wave) {
       cols: cols,
       stamps: stamps,
       open: "any",
-      // centered: (Math.random()+Math.random())/2,
-      // tight: (Math.random()+Math.random())/2,
-      // thin: (Math.random()+Math.random())/2,
       centered: Math.random(),
       tight: Math.random(),
       thin: Math.random(),
       area: a,
+      fuelChance: fuelChance,
     }),
     locked: false,
   }];

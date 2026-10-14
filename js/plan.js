@@ -3,7 +3,7 @@
 function Plan() {}
 
 Plan.blank = function () {
-  return { wave: 1, rows: 6, cols: 6, stamps: ["33"] };
+  return { wave: 1, rows: 6, cols: 6, stamps: ["33"], fuelChance: 0 };
 };
 
 Plan.copy = function (plan) {
@@ -47,6 +47,11 @@ Plan.copy = function (plan) {
     if (area < 15) area = 15;
     if (area > 20) area = 20;
   }
+  let fuelChance = plan.fuelChance;
+  if (fuelChance == null || fuelChance !== fuelChance) fuelChance = 0;
+  fuelChance = +fuelChance;
+  if (fuelChance < 0) fuelChance = 0;
+  if (fuelChance > 1) fuelChance = 1;
   const out = {
     wave: wave,
     rows: rows,
@@ -56,6 +61,7 @@ Plan.copy = function (plan) {
     centered: centered,
     tight: tight,
     thin: thin,
+    fuelChance: fuelChance,
   };
   if (area != null) out.area = area;
   return out;
