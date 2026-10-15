@@ -12,7 +12,7 @@ const CELL_TYPES = {
   cleared: { fill: "#3f6242", mark: "#b8352c", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   cleared_hint: { fill: "#3f6242", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   ruined: { fill: "#3c4d72", mark: "#6e88ba", group: true, round: 1, vary: "group", varyAmount: 0.05 },
-  barrier: { fill: "#8a6a3a", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.04 },
+  barrier: { fill: "#664719", mark: null, group: false, round: 0.2, vary: "cell", varyAmount: 0.06 },
   fuel: { fill: "#d6bf48", mark: null, group: false, round: 2, vary: "pulse", varyAmount: 0.08 },
 };
 
