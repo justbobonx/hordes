@@ -112,7 +112,9 @@ Ui.prototype.makeCard = function (card, index) {
 
   const wave = document.createElement("div");
   wave.className = "plan-wave";
-  wave.textContent = plan.wave ? "WAVE " + plan.wave : "TEST";
+  wave.innerHTML  = plan.wave ? "WAVE " + plan.wave : "TEST";
+  wave.innerHTML  += "<br>"+generateCityName();
+  
   btn.appendChild(wave);
 
   const size = document.createElement("div");
@@ -131,9 +133,9 @@ Ui.prototype.makeCard = function (card, index) {
   const tightPct = Math.round((+plan.tight || 0) * 100);
   const centeredPct = Math.round((+plan.centered || 0) * 100);
   const thinPct = Math.round((+plan.thin || 0) * 100);
-  let metaText = "C:" + centeredPct + "  F:" + tightPct + "  T:" + thinPct;
-  if (plan.area != null) metaText += "  A:" + plan.area;
-  meta.textContent = metaText;
+  let metaText = "Center:" + centeredPct + "  Flush:" + tightPct + "<br>"
+    + "Trim:" + thinPct + "  Area:" + plan.area;
+  meta.innerHTML = metaText;
   btn.appendChild(meta);
 
   const foot = document.createElement("span");
