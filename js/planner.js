@@ -29,7 +29,7 @@ Planner.offer = function (wave) {
     base++;
     hold = base - 1;
   }
-  let count = base + ((Math.random() * 3) | 0) - 1;
+  let count = base + ((Math.random() * 5) | 0) - 2;
   if (count < 1) count = 1;
   const pool = [];
   const ids = Object.keys(Grid.STAMP_DEFINITIONS);
