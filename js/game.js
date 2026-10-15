@@ -1253,7 +1253,7 @@ Game.prototype.drawBoard = function (ctx) {
       oseen[ok] = true;
       const x = o.x + orange[i].c * o.cell;
       const y = o.y + orange[i].r * o.cell;
-      ctx.strokeStyle = "#e07a2f";
+      ctx.strokeStyle = "#EBB447";
       ctx.strokeRect(x + orangeInset, y + orangeInset, o.cell - orangeInset * 2, o.cell - orangeInset * 2);
       // Chain: any new fuel in this secondary
       const ncell = this.grid.at(orange[i].r, orange[i].c);
