@@ -1,5 +1,8 @@
 /** Layout, input, flow, clock, draw. */
 
+const AIM_COLOR = "#f2e27a";
+const AIM_HINT_COLOR = "#f7a227";
+
 function Game() {
   this.ui = new Ui();
   this.chrome = new PlayChrome();
@@ -31,6 +34,8 @@ function Game() {
   this.actions = [];
   this.actionTimer = 0;
   this.stampHeld = false;
+  this.hintLock = false;
+  this.hintTimer = 0;
   this.sprites = null;
 }
 
@@ -223,9 +228,10 @@ Game.prototype.beginWave = function (plan) {
   this.plan = Plan.copy(plan);
   this.grid = GridBuilder.build(this.plan);
   this.initial = this.grid.types();
+  this.grid.writeTypes(this.initial);
   this.queue = this.plan.stamps.slice();
-  this.remAnchors = this.anchors.slice();
   this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
+  this.remAnchors = this.anchors.slice();
   this.lost = false;
   this.ended = null;
   this.elapsedMs = 0;
@@ -243,8 +249,10 @@ Game.prototype.restore = function (data) {
   this.initial = data.initial || this.grid.types();
   this.queue = Array.isArray(data.queue) ? data.queue.slice() : [];
   this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
-  this.remAnchors = Array.isArray(data.remAnchors) ? data.remAnchors.slice() : this.anchors.slice();
-  if (this.remAnchors.length !== this.queue.length) this.remAnchors = this.anchors.slice(0, this.queue.length);
+  this.remAnchors = this.anchors.slice();
+  if (Array.isArray(data.remAnchors) && data.remAnchors.length === this.queue.length) {
+    this.remAnchors = data.remAnchors.slice();
+  }
   this.plan = Plan.copy(data.plan);
   this.wave = data.wave || this.plan.wave || this.wave;
   this.lost = !!data.lost;
@@ -309,7 +317,7 @@ Game.prototype.finish = function () {
 };
 
 Game.prototype.waiting = function () {
-  return this.actions.length > 0 || this.stampHeld;
+  return this.actions.length > 0 || this.stampHeld || this.hintLock;
 };
 
 Game.prototype.dropAt = function (row, col) {
@@ -321,25 +329,59 @@ Game.prototype.dropAt = function (row, col) {
 Game.prototype.onHint = function () {
   if (!this.grid || this.ended || !this.queue.length || !this.plan || this.waiting()) return;
   if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
+  if (!this.remAnchors || this.remAnchors.length !== this.queue.length) {
+    this.remAnchors = this.anchors ? this.anchors.slice(0, this.queue.length) : [];
+  }
+  const rows = this.grid.rows;
+  const cols = this.grid.cols;
   let best = -1;
-  let bestScore = -1;
+  let bestScore = -Infinity;
   for (let i = 0; i < this.queue.length; i++) {
     const seat = this.remAnchors[i];
-    if (!seat) continue;
-    const cells = Grid.footprint(this.grid.rows, this.grid.cols, this.queue[i], seat.row, seat.col);
-    let score = 0;
-    for (let k = 0; k < cells.length; k++) {
-      const cell = this.grid.at(cells[k].r, cells[k].c);
-      if (cell && cell.is("horde")) score++;
+    const kind = this.queue[i];
+    const shape = Grid.STAMP_DEFINITIONS[kind];        
+    const r0 = Math.round(seat.row - (shape.h - 1) / 2);
+    const c0 = Math.round(seat.col - (shape.w - 1) / 2);
+    const r1 = r0 + shape.h - 1;
+    const c1 = c0 + shape.w - 1;
+    let truncated = 0;
+    const inRect = {};
+    for (let rr = r0; rr <= r1; rr++) {
+      for (let cc = c0; cc <= c1; cc++) {
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) truncated++;
+        else inRect[rr + "," + cc] = true;
+      }
     }
-    if (score > bestScore) {
+    let hordeN = 0;
+    let ringN = 0;
+    for (let rr = r0 - 1; rr <= r1 + 1; rr++) {
+      for (let cc = c0 - 1; cc <= c1 + 1; cc++) {
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        if (inRect[rr + "," + cc]) continue;
+        ringN++;
+        const cell = this.grid.at(rr, cc);
+        if (cell && cell.is("horde")) hordeN++;
+      }
+    }
+    const score = ringN > 0 ? (hordeN + truncated) / ringN : 0;
+    if (score > bestScore || (score === bestScore && (best < 0 || i < best))) {
       bestScore = score;
       best = i;
     }
   }
-  if (best < 0 || bestScore <= 0) return;
+  if (best < 0) return;
   const seat = this.remAnchors[best];
-  this.beginDrop(seat.row, seat.col, true, best);
+  this.selectedQ = best;
+  this.preview = { qIndex: best, row: seat.row, col: seat.col };
+  this.hintLock = true;
+  const self = this;
+  if (this.hintTimer) window.clearTimeout(this.hintTimer);
+  this.hintTimer = window.setTimeout(function () {
+    self.hintTimer = 0;
+    self.hintLock = false;
+    if (!self.grid || self.ended || best >= self.queue.length) return;
+    self.beginDrop(seat.row, seat.col, true, best);
+  }, 1000);
 };
 
 Game.prototype.beginDrop = function (row, col, hint, qIndex) {
@@ -691,6 +733,9 @@ Game.prototype.flushActions = function () {
 Game.prototype.abortActions = function () {
   if (this.actionTimer) window.clearTimeout(this.actionTimer);
   this.actionTimer = 0;
+  if (this.hintTimer) window.clearTimeout(this.hintTimer);
+  this.hintTimer = 0;
+  this.hintLock = false;
   this.actions = [];
   this.stampHeld = false;
 };
@@ -1127,7 +1172,7 @@ Game.prototype.drawBoard = function (ctx) {
       ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
     }
   }
-  if (!this.preview || !this.queue.length || this.waiting()) return;
+  if (!this.preview || !this.queue.length || (this.waiting() && !this.hintLock)) return;
   const kind = this.queue[this.preview.qIndex];
   if (!kind) return;
   const raw = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
@@ -1153,7 +1198,7 @@ Game.prototype.drawBoard = function (ctx) {
     seeds.push(candidates[i]);
   }
   const primary = this.reachable(raw, seeds, row, col);
-  // Yellow: primary reachable
+  ctx.strokeStyle = this.hintLock ? AIM_HINT_COLOR : AIM_COLOR;
   for (let i = 0; i < primary.length; i++) {
     const x = o.x + primary[i].c * o.cell;
     const y = o.y + primary[i].r * o.cell;
@@ -1268,6 +1313,7 @@ Game.prototype.persist = function () {
 
 const game = new Game();
 game.boot();
+
 
 
 
