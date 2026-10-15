@@ -526,46 +526,20 @@ Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol)
 // enqueueProp from here to start another prop. The wait stays up until those drain.
 Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   if (wasFuel) {
-    const DIRS8 = [
-      [-1, -1], [-1, 0], [-1, 1],
-      [0, -1],           [0, 1],
-      [1, -1],  [1, 0],  [1, 1]
-    ];
     let extra = [];
-    if (action.anchorRow == null || action.anchorCol == null) {
+    if (action.anchorRow != null && action.anchorCol != null) {
+      const cells = Grid.fuelFootprint(this.grid.rows, this.grid.cols, r, c, action.anchorRow, action.anchorCol);
+      for (let i = 0; i < cells.length; i++) {
+        if (cells[i].r === r && cells[i].c === c) continue;
+        extra.push(cells[i]);
+      }
+    } else {
       // no anchor: full centered 3x3
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           if (dr === 0 && dc === 0) continue;
           const rr = r + dr;
           const cc = c + dc;
-          if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
-          extra.push({ r: rr, c: cc });
-        }
-      }
-    } else {
-      const dr = r - action.anchorRow;
-      const dc = c - action.anchorCol;
-      let bestDir = 0;
-      let bestDot = -Infinity;
-      const len = Math.sqrt(dr * dr + dc * dc) || 1;
-      for (let d = 0; d < DIRS8.length; d++) {
-        const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
-        const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
-        if (dot > bestDot) {
-          bestDot = dot;
-          bestDir = d;
-        }
-      }
-      const outDir = DIRS8[bestDir];
-      const rel = [-outDir[0], -outDir[1]];
-      const centerR = r - rel[0];
-      const centerC = c - rel[1];
-      for (let ddr = -1; ddr <= 1; ddr++) {
-        for (let ddc = -1; ddc <= 1; ddc++) {
-          const rr = Math.round(centerR + ddr);
-          const cc = Math.round(centerC + ddc);
-          if (rr === r && cc === c) continue;
           if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
           extra.push({ r: rr, c: cc });
         }
@@ -585,6 +559,9 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
         action.cells.push(cell);
       }
     }
+    // Advance the chain anchor so any later fuel in this wave orients off this fuel.
+    action.anchorRow = r;
+    action.anchorCol = c;
   }
   return null;
 };
@@ -1188,22 +1165,27 @@ Game.prototype.drawBoard = function (ctx) {
   const queue = [];
   for (let i = 0; i < primary.length; i++) {
     const cell = this.grid.at(primary[i].r, primary[i].c);
-    if (cell && cell.is("fuel")) queue.push(primary[i]);
+    if (cell && cell.is("fuel")) queue.push({ fuel: primary[i], prevR: row, prevC: col });
   }
   while (queue.length) {
-    const fuel = queue.shift();
+    const item = queue.shift();
+    const fuel = item.fuel;
+    const prevR = item.prevR;
+    const prevC = item.prevC;
     const fk = fuel.r + "," + fuel.c;
     if (fuelSeen[fk]) continue;
     fuelSeen[fk] = true;
-    // Build offset 3x3 exactly as onCellLand
-    const DIRS8 = [
-      [-1, -1], [-1, 0], [-1, 1],
-      [0, -1],           [0, 1],
-      [1, -1],  [1, 0],  [1, 1]
-    ];
+    // Build offset 3x3 exactly as onCellLand (chain from prev anchor)
     let extra = [];
     let fseeds = [];
-    if (row == null || col == null) {
+    if (prevR != null && prevC != null) {
+      const cells = Grid.fuelFootprint(rows, cols, fuel.r, fuel.c, prevR, prevC);
+      for (let i = 0; i < cells.length; i++) {
+        if (cells[i].r === fuel.r && cells[i].c === fuel.c) continue;
+        extra.push(cells[i]);
+        fseeds.push(cells[i]);
+      }
+    } else {
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
           if (dr === 0 && dc === 0) continue;
@@ -1214,36 +1196,8 @@ Game.prototype.drawBoard = function (ctx) {
           fseeds.push({ r: rr, c: cc });
         }
       }
-    } else {
-      const dr = fuel.r - row;
-      const dc = fuel.c - col;
-      let bestDir = 0;
-      let bestDot = -Infinity;
-      const len = Math.sqrt(dr * dr + dc * dc) || 1;
-      for (let d = 0; d < DIRS8.length; d++) {
-        const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
-        const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
-        if (dot > bestDot) {
-          bestDot = dot;
-          bestDir = d;
-        }
-      }
-      const outDir = DIRS8[bestDir];
-      const rel = [-outDir[0], -outDir[1]];
-      const centerR = fuel.r - rel[0];
-      const centerC = fuel.c - rel[1];
-      for (let ddr = -1; ddr <= 1; ddr++) {
-        for (let ddc = -1; ddc <= 1; ddc++) {
-          const rr = Math.round(centerR + ddr);
-          const cc = Math.round(centerC + ddc);
-          if (rr === fuel.r && cc === fuel.c) continue;
-          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-          extra.push({ r: rr, c: cc });
-          fseeds.push({ r: rr, c: cc });
-        }
-      }
     }
-    const secondary = this.reachable(extra, fseeds, row, col);
+    const secondary = this.reachable(extra, fseeds, prevR, prevC);
     // Include the fuel cell itself in the orange set
     const orange = [{ r: fuel.r, c: fuel.c }].concat(secondary);
     const oseen = {};
@@ -1255,9 +1209,11 @@ Game.prototype.drawBoard = function (ctx) {
       const y = o.y + orange[i].r * o.cell;
       ctx.strokeStyle = "#EBB447";
       ctx.strokeRect(x + orangeInset, y + orangeInset, o.cell - orangeInset * 2, o.cell - orangeInset * 2);
-      // Chain: any new fuel in this secondary
+      // Chain: any new fuel in this secondary uses this fuel as its prev
       const ncell = this.grid.at(orange[i].r, orange[i].c);
-      if (ncell && ncell.is("fuel") && !fuelSeen[ok]) queue.push(orange[i]);
+      if (ncell && ncell.is("fuel") && !fuelSeen[ok]) {
+        queue.push({ fuel: orange[i], prevR: fuel.r, prevC: fuel.c });
+      }
     }
   }
   ctx.strokeStyle = "#f2e27a";

@@ -625,49 +625,21 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
   const FUEL_H = 3;
   const full = FUEL_W * FUEL_H;
   const keep = full - Math.min(FUEL_W, FUEL_H);
-  const DIRS8 = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1]
-  ];
   const legal = [];
   for (let ci = 0; ci < candidates.length; ci++) {
     const fuelCell = candidates[ci];
     if (cover[fuelCell.r][fuelCell.c] !== 1 || sole[fuelCell.r][fuelCell.c] !== prevId) continue;
-    const dr = fuelCell.r - prevAnchor.r;
-    const dc = fuelCell.c - prevAnchor.c;
-    let bestDir = 0;
-    let bestDot = -Infinity;
-    const len = Math.sqrt(dr * dr + dc * dc) || 1;
-    for (let d = 0; d < DIRS8.length; d++) {
-      const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
-      const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
-      if (dot > bestDot) {
-        bestDot = dot;
-        bestDir = d;
-      }
-    }
-    // outward direction; place fuelCell on the opposite edge of the 3x3 so the stamp extends outward
-    const outDir = DIRS8[bestDir];
-    const rel = [-outDir[0], -outDir[1]]; // fuel relative to stamp center
-    const centerR = fuelCell.r - rel[0];
-    const centerC = fuelCell.c - rel[1];
-    const cells = [];
-    const r0 = Math.round(centerR - 1);
-    const c0 = Math.round(centerC - 1);
+    const cells = Grid.fuelFootprint(rows, cols, fuelCell.r, fuelCell.c, prevAnchor.r, prevAnchor.c);
+    if (!cells.length) continue;
     let fresh = 0;
     const lost = [];
-    for (let ddr = 0; ddr < FUEL_H; ddr++) {
-      for (let ddc = 0; ddc < FUEL_W; ddc++) {
-        const rr = r0 + ddr;
-        const cc = c0 + ddc;
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-        cells.push({ r: rr, c: cc });
-        if (cover[rr][cc] === 0) fresh++;
-        else if (cover[rr][cc] === 1) {
-          const owner = sole[rr][cc];
-          if (owner >= 0) lost[owner] = (lost[owner] || 0) + 1;
-        }
+    for (let i = 0; i < cells.length; i++) {
+      const rr = cells[i].r;
+      const cc = cells[i].c;
+      if (cover[rr][cc] === 0) fresh++;
+      else if (cover[rr][cc] === 1) {
+        const owner = sole[rr][cc];
+        if (owner >= 0) lost[owner] = (lost[owner] || 0) + 1;
       }
     }
     if (fresh < 1) continue;
@@ -677,7 +649,7 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
       if ((own[s] || 0) - (lost[s] || 0) < (stampKeep[s] || 0)) { ok = false; break; }
     }
     if (!ok) continue;
-    legal.push({ cells: cells, fuelCell: fuelCell, fresh: fresh, centerR: centerR, centerC: centerC });
+    legal.push({ cells: cells, fuelCell: fuelCell, fresh: fresh });
   }
   if (!legal.length) return null;
   const pick = legal[(Math.random() * legal.length) | 0];

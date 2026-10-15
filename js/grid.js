@@ -49,6 +49,44 @@ Grid.footprint = function (rows, cols, kind, row, col) {
   return out;
 };
 
+// 3x3 fuel stamp shifted so the fuel cell sits on the back edge of the
+// vector from (anchorR, anchorC) to (fuelR, fuelC). Returns the cells
+// (including the fuel) or [] if no usable direction.
+Grid.fuelFootprint = function (rows, cols, fuelR, fuelC, anchorR, anchorC) {
+  const DIRS8 = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1],           [0, 1],
+    [1, -1],  [1, 0],  [1, 1]
+  ];
+  const dr = fuelR - anchorR;
+  const dc = fuelC - anchorC;
+  let bestDir = 0;
+  let bestDot = -Infinity;
+  const len = Math.sqrt(dr * dr + dc * dc) || 1;
+  for (let d = 0; d < DIRS8.length; d++) {
+    const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
+    const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
+    if (dot > bestDot) {
+      bestDot = dot;
+      bestDir = d;
+    }
+  }
+  const outDir = DIRS8[bestDir];
+  const rel = [-outDir[0], -outDir[1]];
+  const centerR = fuelR - rel[0];
+  const centerC = fuelC - rel[1];
+  const out = [];
+  for (let ddr = -1; ddr <= 1; ddr++) {
+    for (let ddc = -1; ddc <= 1; ddc++) {
+      const rr = Math.round(centerR + ddr);
+      const cc = Math.round(centerC + ddc);
+      if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+      out.push({ r: rr, c: cc });
+    }
+  }
+  return out;
+};
+
 Grid.prototype.at = function (r, c) {
   if (r < 0 || c < 0 || r >= this.rows || c >= this.cols) return null;
   return this.cells[r][c];
