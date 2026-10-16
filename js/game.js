@@ -1,4 +1,4 @@
-/** Layout, input, flow, clock, draw. */
+/** Flow, input, clock, persist. Drawing in drawing.js, mechanics in mechanics.js. */
 
 const AIM_COLOR = "#f2e27a";
 const AIM_HINT_COLOR = "#f7a227";
@@ -19,6 +19,7 @@ function Game() {
   this.testPlan = null;
   this.clockOn = 0;
   this.elapsedMs = 0;
+  this.resets = 0;
   this.storyQueue = [];
   this.storyAfter = null;
   this.hold = null;
@@ -45,6 +46,8 @@ Game.prototype.boot = function () {
     this.wave = run.wave > 0 ? run.wave : 1;
     this.cleared = run.cleared | 0;
     this.seen = run.seen || {};
+    this.elapsedMs = run.elapsedMs | 0;
+    this.resets = run.resets | 0;
   }
   this.testPlan = Plan.fromQuery(location.search);
   this.bind();
@@ -150,6 +153,7 @@ Game.prototype.startOver = function () {
   this.lost = false;
   this.ended = null;
   this.elapsedMs = 0;
+  this.resets = 0;
   this.clockOn = 0;
   this.storyQueue = [];
   this.storyAfter = null;
@@ -235,6 +239,7 @@ Game.prototype.beginWave = function (plan) {
   this.lost = false;
   this.ended = null;
   this.elapsedMs = 0;
+  this.resets = 0;
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -258,7 +263,7 @@ Game.prototype.restore = function (data) {
   this.lost = !!data.lost;
   this.ended = data.ended || null;
   this.testPlan = data.testPlan ? Plan.copy(data.testPlan) : this.testPlan;
-  this.elapsedMs = data.elapsedMs | 0;
+  // elapsed and resets come from run (already loaded in boot)
   this.clockOn = this.ended ? 0 : Date.now();
   this.ui.hideStart();
   this.layout();
@@ -273,7 +278,8 @@ Game.prototype.resetWave = function () {
   this.remAnchors = this.anchors.slice();
   this.lost = false;
   this.ended = null;
-  this.elapsedMs = 0;
+  this.resets = (this.resets | 0) + 1;
+  // do not zero elapsedMs — keep the figuring-out time
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -424,320 +430,6 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
   this.persist();
   this.updateHud();
   this.kickActions();
-};
-
-
-// Compute cells reachable from seeds inside candidateCells.
-// Barriers are included (destroyed) but do not spread.
-// Diagonal steps are blocked if either ortho is a barrier.
-// Returns array of {r,c}. Boom step never sees barriers.
-Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol) {
-  if (!candidateCells || !candidateCells.length || !seeds || !seeds.length) return [];
-  const have = {};
-  for (let i = 0; i < candidateCells.length; i++) {
-    const k = candidateCells[i].r + "," + candidateCells[i].c;
-    have[k] = true;
-  }
-
-  // Shadow: seed with barrier's in-cone neighbors, then flow outward inside the 45° cone.
-  const shadowed = {};
-  if (anchorRow != null && anchorCol != null) {
-    const dirs8 = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-    for (let i = 0; i < candidateCells.length; i++) {
-      const br = candidateCells[i].r;
-      const bc = candidateCells[i].c;
-      const bcell = this.grid.at(br, bc);
-      if (!bcell || !bcell.is("barrier")) continue;
-      const adr = br - anchorRow;
-      const adc = bc - anchorCol;
-      const alen2 = adr * adr + adc * adc;
-      if (alen2 < 0.01) continue;
-      function inCone(rr, cc) {
-        const ddr = rr - br;
-        const ddc = cc - bc;
-        const parallel = adr * ddr + adc * ddc;
-        if (parallel <= 0) return false;
-        const cross = adr * ddc - adc * ddr;
-        return Math.abs(cross) <= parallel; // angle <= 45°
-      }
-      const q = [];
-      const seen = {};
-      // pass 1: immediate neighbors in the cone
-      for (let d = 0; d < dirs8.length; d++) {
-        const rr = br + dirs8[d][0];
-        const cc = bc + dirs8[d][1];
-        const nk = rr + "," + cc;
-        if (!have[nk] || !inCone(rr, cc)) continue;
-        seen[nk] = true;
-        shadowed[nk] = true;
-        q.push({ r: rr, c: cc, par: adr * (rr - br) + adc * (cc - bc) });
-      }
-      // later passes: flow to cells with strictly greater parallel, still in cone
-      while (q.length) {
-        const cur = q.shift();
-        for (let d = 0; d < dirs8.length; d++) {
-          const rr = cur.r + dirs8[d][0];
-          const cc = cur.c + dirs8[d][1];
-          const nk = rr + "," + cc;
-          if (seen[nk] || !have[nk] || !inCone(rr, cc)) continue;
-          const par = adr * (rr - br) + adc * (cc - bc);
-          if (par <= cur.par) continue; // must move further along away axis
-          seen[nk] = true;
-          shadowed[nk] = true;
-          q.push({ r: rr, c: cc, par: par });
-        }
-      }
-    }
-  }
-
-  const landed = {};
-  const result = [];
-  const frontier = [];
-  const seenSeed = {};
-  for (let i = 0; i < seeds.length; i++) {
-    const k = seeds[i].r + "," + seeds[i].c;
-    if (seenSeed[k] || !have[k] || shadowed[k]) continue;
-    seenSeed[k] = true;
-    frontier.push({ r: seeds[i].r, c: seeds[i].c });
-  }
-  const allDirs = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1],
-  ];
-  while (frontier.length) {
-    const next = [];
-    const nextSeen = {};
-    for (let i = 0; i < frontier.length; i++) {
-      const hit = frontier[i];
-      const key = hit.r + "," + hit.c;
-      if (landed[key]) continue;
-      landed[key] = true;
-      result.push({ r: hit.r, c: hit.c });
-      const hitCell = this.grid.at(hit.r, hit.c);
-      if (hitCell && hitCell.is("barrier")) continue; // land + destroy, do not spread
-      for (let d = 0; d < allDirs.length; d++) {
-        const dr = allDirs[d][0];
-        const dc = allDirs[d][1];
-        const rr = hit.r + dr;
-        const cc = hit.c + dc;
-        const nkey = rr + "," + cc;
-        if (!have[nkey] || landed[nkey] || nextSeen[nkey] || shadowed[nkey]) continue;
-        nextSeen[nkey] = true;
-        next.push({ r: rr, c: cc });
-      }
-    }
-    frontier.length = 0;
-    for (let i = 0; i < next.length; i++) frontier.push(next[i]);
-  }
-  return result;
-};
-
-// cells and seeds are { r, c, from? }. Seeds must sit in cells. from null means launch all dirs (anchor). Later effects call this from onCellLand.
-Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol) {
-  if (!cells || !cells.length || !seeds || !seeds.length) return null;
-  const have = {};
-  for (let i = 0; i < cells.length; i++) have[cells[i].r + "," + cells[i].c] = cells[i];
-  const frontier = [];
-  const seen = {};
-  for (let i = 0; i < seeds.length; i++) {
-    const key = seeds[i].r + "," + seeds[i].c;
-    if (seen[key] || !have[key]) continue;
-    seen[key] = true;
-    frontier.push({ r: seeds[i].r, c: seeds[i].c, from: seeds[i].from || null });
-  }
-  if (!frontier.length) return null;
-  const action = {
-    type: "wave",
-    hint: !!hint,
-    cells: cells,
-    have: have,
-    frontier: frontier,
-    landed: {},
-    stopped: false,
-    done: false,
-    anchorRow: anchorRow,
-    anchorCol: anchorCol,
-  };
-  this.actions.push(action);
-  return action;
-};
-
-// Return { stop: true } to keep the wave from leaving this cell.
-// Set action.stopped to halt the wave after this generation.
-// enqueueProp from here to start another prop. The wait stays up until those drain.
-Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
-  if (wasFuel) {
-    let extra = [];
-    if (action.anchorRow != null && action.anchorCol != null) {
-      const cells = Grid.fuelFootprint(this.grid.rows, this.grid.cols, r, c, action.anchorRow, action.anchorCol);
-      for (let i = 0; i < cells.length; i++) {
-        if (cells[i].r === r && cells[i].c === c) continue;
-        extra.push(cells[i]);
-      }
-    } else {
-      // no anchor: full centered 3x3
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const rr = r + dr;
-          const cc = c + dc;
-          if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
-          extra.push({ r: rr, c: cc });
-        }
-      }
-    }
-    if (extra.length) {
-      const candidates = extra.slice();
-      candidates.push({ r: r, c: c });
-      const fuelSeed = [{ r: r, c: c }];
-      const pruned = this.reachable(candidates, fuelSeed, r, c);
-      for (let i = 0; i < pruned.length; i++) {
-        const cell = pruned[i];
-        if (cell.r === r && cell.c === c) continue;
-        const key = cell.r + "," + cell.c;
-        if (action.have[key]) continue;
-        action.have[key] = cell;
-        action.cells.push(cell);
-      }
-    }
-    // Advance the chain anchor so any later fuel in this wave orients off this fuel.
-    action.anchorRow = r;
-    action.anchorCol = c;
-  }
-  return null;
-};
-
-Game.prototype.kickActions = function () {
-  if (this.actionTimer || !this.actions.length) return;
-  const self = this;
-  this.actionTimer = window.setTimeout(function () {
-    self.actionTimer = 0;
-    self.stepActions();
-  }, this.propMs);
-};
-
-Game.prototype.stepActions = function () {
-  if (!this.grid || !this.actions.length) {
-    this.settleStamp();
-    return;
-  }
-  const action = this.actions[0];
-  if (action.type === "wave") this.stepWave(action);
-  if (action.done) this.actions.shift();
-  if (this.actions.length) this.kickActions();
-  else this.settleStamp();
-};
-
-// Shared land path for both animated step and flush.
-// Returns the onCellLand result (or null).
-Game.prototype.landCell = function (action, hit) {
-  const key = hit.r + "," + hit.c;
-  if (action.landed[key]) return null;
-  action.landed[key] = true;
-  const cell = this.grid.at(hit.r, hit.c);
-  const wasFuel = cell && cell.is("fuel");
-  if (this.grid.apply([hit])) this.lost = true;
-  if (action.hint) {
-    const after = this.grid.at(hit.r, hit.c);
-    if (after && after.is("cleared")) after.setType("cleared_hint");
-  }
-  const result = this.onCellLand(action, hit.r, hit.c, wasFuel, hit.from);
-  return result;
-};
-
-Game.prototype.stepWave = function (action) {
-  const spreaders = [];
-  for (let i = 0; i < action.frontier.length; i++) {
-    const hit = action.frontier[i];
-    const spread = this.landCell(action, hit);
-    if (action.stopped || (spread && spread.stop)) continue;
-    spreaders.push(hit);
-  }
-  if (action.stopped) {
-    action.done = true;
-    return;
-  }
-  const next = [];
-  const nextSeen = {};
-  const allDirs = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1],
-  ];
-  for (let i = 0; i < spreaders.length; i++) {
-    const hit = spreaders[i];
-    for (let d = 0; d < allDirs.length; d++) {
-      const dr = allDirs[d][0];
-      const dc = allDirs[d][1];
-      const rr = hit.r + dr;
-      const cc = hit.c + dc;
-      const nkey = rr + "," + cc;
-      if (!action.have[nkey] || action.landed[nkey] || nextSeen[nkey]) continue;
-      nextSeen[nkey] = true;
-      next.push({ r: rr, c: cc, from: [dr, dc] });
-    }
-  }
-  if (!next.length) action.done = true;
-  else action.frontier = next;
-};
-
-Game.prototype.settleStamp = function () {
-  if (this.actions.length) return;
-  if (this.stampHeld) {
-    const i = this.stampHeldIndex | 0;
-    if (i >= 0 && i < this.queue.length) {
-      this.queue.splice(i, 1);
-      this.remAnchors.splice(i, 1);
-    }
-    this.stampHeld = false;
-    this.stampHeldIndex = 0;
-  }
-  // Reset highlight to default next piece (rightmost / index 0)
-  this.selectedQ = this.queue.length ? 0 : null;
-  this.preview = null;
-  this.persist();
-  this.updateHud();
-  if (!this.queue.length) this.finish();
-};
-
-Game.prototype.flushActions = function () {
-  if (this.actionTimer) window.clearTimeout(this.actionTimer);
-  this.actionTimer = 0;
-  while (this.actions.length && this.grid) {
-    const action = this.actions[0];
-    if (action.type === "wave" && !action.stopped) {
-      for (let i = 0; i < action.cells.length; i++) {
-        this.landCell(action, action.cells[i]);
-      }
-    }
-    action.done = true;
-    this.actions.shift();
-  }
-  this.actions = [];
-  if (this.stampHeld) {
-    const i = this.stampHeldIndex | 0;
-    if (i >= 0 && i < this.queue.length) {
-      this.queue.splice(i, 1);
-      this.remAnchors.splice(i, 1);
-    }
-    this.stampHeld = false;
-    this.stampHeldIndex = 0;
-  }
-  // Reset highlight to default next piece (rightmost / index 0)
-  this.selectedQ = this.queue.length ? 0 : null;
-  this.preview = null;
-  if (this.grid && !this.queue.length) this.finish();
-};
-
-Game.prototype.abortActions = function () {
-  if (this.actionTimer) window.clearTimeout(this.actionTimer);
-  this.actionTimer = 0;
-  if (this.hintTimer) window.clearTimeout(this.hintTimer);
-  this.hintTimer = 0;
-  this.hintLock = false;
-  this.actions = [];
-  this.stampHeld = false;
 };
 
 Game.prototype.onDown = function (e) {
@@ -953,148 +645,7 @@ Game.prototype.cycleCell = function (row, col) {
   this.persist();
 };
 
-Game.prototype.layout = function () {
-  const canvas = this.ui.canvas;
-  const pad = this.ui.hudPad();
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  canvas.style.width = w + "px";
-  canvas.style.height = h + "px";
-  canvas.style.imageRendering = "pixelated";
-  canvas.width = Math.floor(w * dpr);
-  canvas.height = Math.floor(h * dpr);
-  this.ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const rows = this.grid ? this.grid.rows : 6;
-  const cols = this.grid ? this.grid.cols : 6;
-  const trayH = this.trayH;
-  const availW = w - 12;
-  const availH = h - trayH - pad.bot - 12;
-  const cell = Math.max(8, Math.min(availW / cols, availH / rows));
-  const boardW = cell * cols;
-  const boardH = cell * rows;
-  this.origin = {
-    x: (w - boardW) / 2,
-    y: trayH + (h - trayH - pad.bot - boardH) / 2,
-    cell: cell,
-    rows: rows,
-    cols: cols,
-  };
-  this.layoutTray();
-};
 
-Game.prototype.layoutTray = function () {
-  const w = window.innerWidth;
-  const h = this.trayH;
-  const list = this.queue || [];
-  if (!list.length) {
-    this.tray = { h: h, stamps: [] };
-    return;
-  }
-  let unitsW = 0;
-  let maxH = 0;
-  const shapes = [];
-  for (let i = 0; i < list.length; i++) {
-    const s = Grid.STAMP_DEFINITIONS[list[i]] || { w: 1, h: 1 };
-    shapes.push(s);
-    unitsW += s.w;
-    if (s.h > maxH) maxH = s.h;
-  }
-  const gaps = Math.max(0, list.length - 1);
-  const pad = 8;
-  const cellByW = (w - pad * 2 - gaps * 6) / Math.max(1, unitsW);
-  const cellByH = (h - pad * 2) / Math.max(1, maxH);
-  const cell = Math.max(4, Math.min(cellByW, cellByH, 16));
-  const totalW = unitsW * cell + gaps * 6;
-  let x = (w - totalW) / 2;
-  const stamps = [];
-  for (let i = list.length - 1; i >= 0; i--) {
-    const s = shapes[i];
-    const sw = s.w * cell;
-    const sh = s.h * cell;
-    const y = (h - sh) / 2;
-    stamps.push({ index: i, kind: list[i], x: x, y: y, w: sw, h: sh, cell: cell });
-    x += sw + 6;
-  }
-  this.tray = { h: h, cell: cell, stamps: stamps };
-};
-
-Game.prototype.hitTray = function (x, y) {
-  if (!this.tray || !this.tray.stamps) return null;
-  for (let i = 0; i < this.tray.stamps.length; i++) {
-    const s = this.tray.stamps[i];
-    if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) return s;
-  }
-  return null;
-};
-
-Game.prototype.pointOnPreview = function (x, y) {
-  if (!this.preview || !this.grid) return false;
-  const kind = this.queue[this.preview.qIndex];
-  if (!kind) return false;
-  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, this.preview.row, this.preview.col);
-  const o = this.origin;
-  for (let i = 0; i < cells.length; i++) {
-    const cx = o.x + cells[i].c * o.cell;
-    const cy = o.y + cells[i].r * o.cell;
-    if (x >= cx && x < cx + o.cell && y >= cy && y < cy + o.cell) return true;
-  }
-  return false;
-};
-
-Game.prototype.draw = function () {
-  const ctx = this.ui.ctx;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  ctx.fillStyle = "#171c14";
-  ctx.fillRect(0, 0, w, h);
-  this.layoutTray();
-  this.drawTray(ctx);
-  if (this.grid) this.drawBoard(ctx);
-};
-
-Game.prototype.drawTray = function (ctx) {
-  const h = this.trayH;
-  const w = window.innerWidth;
-  ctx.fillStyle = "#12160f";
-  ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = "#2a3324";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, h - 1);
-  ctx.lineTo(w, h - 1);
-  ctx.stroke();
-  const stamps = this.tray && this.tray.stamps ? this.tray.stamps : [];
-  const selected = this.selectedQ != null ? this.selectedQ : (this.preview ? this.preview.qIndex : 0);
-  for (let i = 0; i < stamps.length; i++) {
-    const s = stamps[i];
-    const live = s.index === selected;
-    ctx.fillStyle = "#1c2418";
-    ctx.fillRect(s.x - 2, s.y - 2, s.w + 4, s.h + 4);
-    ctx.fillStyle = "#e07a2f";
-    const cell = s.cell;
-    const shape = Grid.STAMP_DEFINITIONS[s.kind] || { w: 1, h: 1 };
-    for (let r = 0; r < shape.h; r++) {
-      for (let c = 0; c < shape.w; c++) {
-        ctx.fillRect(s.x + c * cell + 1, s.y + r * cell + 1, cell - 2, cell - 2);
-      }
-    }
-    if (live) {
-      ctx.strokeStyle = "#f2e27a";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(s.x - 2, s.y - 2, s.w + 4, s.h + 4);
-    }
-  }
-};
-
-Game.prototype.loop = function () {
-  const self = this;
-  function tick() {
-    self.draw();
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-};
 
 Game.prototype.updateHud = function () {
   const status = this.statusView();
@@ -1125,7 +676,8 @@ Game.prototype.statusView = function () {
   } else {
     if (hordeGone && cities === 0) {
       const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
-      text = "HORDE DESTROYED! (" + this.formatTime(elapsed) + ")";
+      const tries = this.resets | 0;
+      text = "HORDE DESTROYED!\nTIME: " + this.formatTime(elapsed) + "   TRIES: " + tries;
       cls = "status-green";
     } else if (hordeGone && cities > 0) {
       text = cities + " CITIES DESTROYED!";
@@ -1146,133 +698,6 @@ Game.prototype.statusView = function () {
   };
 };
 
-Game.prototype.drawBoard = function (ctx) {
-  const o = this.origin;
-  const rows = this.grid.rows;
-  const cols = this.grid.cols;
-  const gap = Math.max(1, o.cell * 0.03);
-  ctx.fillStyle = "#10140e";
-  ctx.fillRect(o.x - gap, o.y - gap, o.cell * cols + gap * 2, o.cell * rows + gap * 2);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      this.grid.at(r, c).draw(ctx, this.sprites, o.x + c * o.cell, o.y + r * o.cell, o.cell);
-    }
-  }
-  ctx.strokeStyle = "#f2e27a";
-  ctx.lineWidth = Math.max(2, o.cell * 0.07);
-  const inset = Math.max(2, o.cell * 0.05);
-  for (let a = 0; a < this.actions.length; a++) {
-    const action = this.actions[a];
-    if (action.type !== "wave") continue;
-    for (let i = 0; i < action.cells.length; i++) {
-      const hit = action.cells[i];
-      if (action.landed[hit.r + "," + hit.c]) continue;
-      const x = o.x + hit.c * o.cell;
-      const y = o.y + hit.r * o.cell;
-      ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
-    }
-  }
-  if (!this.preview || !this.queue.length || (this.waiting() && !this.hintLock)) return;
-  const kind = this.queue[this.preview.qIndex];
-  if (!kind) return;
-  const raw = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
-  if (!raw.length) return;
-  // Seeds for primary (same logic as beginDrop)
-  const have = {};
-  for (let i = 0; i < raw.length; i++) have[raw[i].r + "," + raw[i].c] = true;
-  const row = this.preview.row;
-  const col = this.preview.col;
-  const rowHalf = row !== Math.floor(row);
-  const colHalf = col !== Math.floor(col);
-  const r0 = rowHalf ? Math.floor(row) : row;
-  const c0 = colHalf ? Math.floor(col) : col;
-  const r1 = rowHalf ? r0 + 1 : r0;
-  const c1 = colHalf ? c0 + 1 : c0;
-  const candidates = [{ r: r0, c: c0 }, { r: r0, c: c1 }, { r: r1, c: c0 }, { r: r1, c: c1 }];
-  const seeds = [];
-  const seen = {};
-  for (let i = 0; i < candidates.length; i++) {
-    const key = candidates[i].r + "," + candidates[i].c;
-    if (seen[key] || !have[key]) continue;
-    seen[key] = true;
-    seeds.push(candidates[i]);
-  }
-  const primary = this.reachable(raw, seeds, row, col);
-  ctx.strokeStyle = this.hintLock ? AIM_HINT_COLOR : AIM_COLOR;
-  for (let i = 0; i < primary.length; i++) {
-    const x = o.x + primary[i].c * o.cell;
-    const y = o.y + primary[i].r * o.cell;
-    ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
-  }
-  // Orange: fuel secondaries (including the fuel cell itself), smaller box
-  const orangeInset = Math.max(6, o.cell * 0.18);
-  const fuelSeen = {};
-  const queue = [];
-  for (let i = 0; i < primary.length; i++) {
-    const cell = this.grid.at(primary[i].r, primary[i].c);
-    if (cell && cell.is("fuel")) queue.push({ fuel: primary[i], prevR: row, prevC: col });
-  }
-  while (queue.length) {
-    const item = queue.shift();
-    const fuel = item.fuel;
-    const prevR = item.prevR;
-    const prevC = item.prevC;
-    const fk = fuel.r + "," + fuel.c;
-    if (fuelSeen[fk]) continue;
-    fuelSeen[fk] = true;
-    // Build offset 3x3 exactly as onCellLand (chain from prev anchor)
-    let extra = [];
-    let fseeds = [];
-    if (prevR != null && prevC != null) {
-      const cells = Grid.fuelFootprint(rows, cols, fuel.r, fuel.c, prevR, prevC);
-      for (let i = 0; i < cells.length; i++) {
-        if (cells[i].r === fuel.r && cells[i].c === fuel.c) continue;
-        extra.push(cells[i]);
-        fseeds.push(cells[i]);
-      }
-    } else {
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const rr = fuel.r + dr;
-          const cc = fuel.c + dc;
-          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-          extra.push({ r: rr, c: cc });
-          fseeds.push({ r: rr, c: cc });
-        }
-      }
-    }
-    const secondary = this.reachable(extra, fseeds, prevR, prevC);
-    // Include the fuel cell itself in the orange set
-    const orange = [{ r: fuel.r, c: fuel.c }].concat(secondary);
-    const oseen = {};
-    for (let i = 0; i < orange.length; i++) {
-      const ok = orange[i].r + "," + orange[i].c;
-      if (oseen[ok]) continue;
-      oseen[ok] = true;
-      const x = o.x + orange[i].c * o.cell;
-      const y = o.y + orange[i].r * o.cell;
-      ctx.strokeStyle = "#EBB447";
-      ctx.strokeRect(x + orangeInset, y + orangeInset, o.cell - orangeInset * 2, o.cell - orangeInset * 2);
-      // Chain: any new fuel in this secondary uses this fuel as its prev
-      const ncell = this.grid.at(orange[i].r, orange[i].c);
-      if (ncell && ncell.is("fuel") && !fuelSeen[ok]) {
-        queue.push({ fuel: orange[i], prevR: fuel.r, prevC: fuel.c });
-      }
-    }
-  }
-  ctx.strokeStyle = "#f2e27a";
-  const ax = o.x + (this.preview.col + 0.5) * o.cell;
-  const ay = o.y + (this.preview.row + 0.5) * o.cell;
-  const m = o.cell * 0.16;
-  // Black half-alpha box twice the yellow size, over the stamp hilite, under the yellow.
-  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-  const bm = m * 2;
-  ctx.fillRect(ax - bm / 2, ay - bm / 2, bm, bm);
-  ctx.fillStyle = "#f2e27a";
-  ctx.fillRect(ax - m / 2, ay - m / 2, m, m);
-};
-
 Game.prototype.pauseClock = function () {
   if (!this.clockOn) return;
   this.elapsedMs += Date.now() - this.clockOn;
@@ -1287,13 +712,19 @@ Game.prototype.formatTime = function (ms) {
 };
 
 Game.prototype.persistRun = function () {
-  Save.writeRun({ wave: this.wave, cleared: this.cleared, seen: this.seen });
+  const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
+  Save.writeRun({
+    wave: this.wave,
+    cleared: this.cleared,
+    seen: this.seen,
+    elapsedMs: elapsed,
+    resets: this.resets | 0,
+  });
 };
 
 Game.prototype.persist = function () {
   this.persistRun();
   if (!this.grid) return;
-  const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
   Save.writeBoard({
     rows: this.grid.rows,
     cols: this.grid.cols,
@@ -1306,15 +737,7 @@ Game.prototype.persist = function () {
     wave: this.wave,
     lost: this.lost,
     ended: this.ended,
-    elapsedMs: elapsed,
     testPlan: this.testPlan,
   });
 };
-
-const game = new Game();
-game.boot();
-
-
-
-
 

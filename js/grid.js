@@ -52,17 +52,31 @@ Grid.footprint = function (rows, cols, kind, row, col) {
 // 3x3 fuel stamp shifted so the fuel cell sits on the back edge of the
 // vector from (anchorR, anchorC) to (fuelR, fuelC). Returns the cells
 // (including the fuel) or [] if no usable direction.
+// If anchor is exactly on the fuel cell, returns the centered 3x3.
 Grid.fuelFootprint = function (rows, cols, fuelR, fuelC, anchorR, anchorC) {
+  const dr = fuelR - anchorR;
+  const dc = fuelC - anchorC;
+  if (dr === 0 && dc === 0) {
+    // Anchor directly on fuel: centered 3x3
+    const out = [];
+    for (let ddr = -1; ddr <= 1; ddr++) {
+      for (let ddc = -1; ddc <= 1; ddc++) {
+        const rr = fuelR + ddr;
+        const cc = fuelC + ddc;
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        out.push({ r: rr, c: cc });
+      }
+    }
+    return out;
+  }
   const DIRS8 = [
     [-1, -1], [-1, 0], [-1, 1],
     [0, -1],           [0, 1],
     [1, -1],  [1, 0],  [1, 1]
   ];
-  const dr = fuelR - anchorR;
-  const dc = fuelC - anchorC;
   let bestDir = 0;
   let bestDot = -Infinity;
-  const len = Math.sqrt(dr * dr + dc * dc) || 1;
+  const len = Math.sqrt(dr * dr + dc * dc);
   for (let d = 0; d < DIRS8.length; d++) {
     const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
     const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);

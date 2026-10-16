@@ -44,14 +44,16 @@ button, a { font-family: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  gap: 4px;
+  padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
   background: #12160f;
   border-color: #2a3324;
   border-style: solid;
   border-top-width: 2px;
   flex-wrap: wrap;
-  row-gap: 4px;
+  row-gap: 2px;
+  /* Reserve two lines of 28px text + padding so the bar does not grow on win. */
+  min-height: 72px;
 }
 
 .hud-left, .hud-mid, .hud-right {
@@ -59,6 +61,7 @@ button, a { font-family: inherit; }
   font-size: 28px;
   letter-spacing: 1px;
   min-width: 0;
+  line-height: 1.0;
 }
 
 .hud-mid {
@@ -171,7 +174,7 @@ h1 {
 .plan-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
 }
 
@@ -224,6 +227,7 @@ h1 {
     padding-left: 6px;
     padding-right: 6px;
     align-items: center;
+    min-height: 84px;
   }
   .hud-left,
   .hud-mid {

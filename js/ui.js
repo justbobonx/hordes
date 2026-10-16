@@ -68,7 +68,7 @@ Ui.prototype.hudPad = function () {
     return h > 0 ? h : fallback;
   }
   return {
-    bot: Math.max(56, barHeight(this.elHudBottom, 56)),
+    bot: Math.max(72, barHeight(this.elHudBottom, 72)),
   };
 };
 
@@ -80,11 +80,11 @@ Ui.prototype.paintHud = function (view) {
       const f = Math.round((+view.plan.tight || 0) * 100);
       const t = Math.round((+view.plan.thin || 0) * 100);
       const pad = function (n) { return (n < 10 ? "0" : "") + n; };
-      label += " (C:" + pad(c) + ",F:" + pad(f) + ",T:" + pad(t);
+      label += "<br>(C:" + pad(c) + ",F:" + pad(f) + ",T:" + pad(t);
       if (view.plan.area != null) label += ",A:" + view.plan.area;
       label += ")";
     }
-    this.elWave.textContent = label;
+    this.elWave.innerHTML = label;
   }
   this.paintStatus(view);
   if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
@@ -93,7 +93,14 @@ Ui.prototype.paintHud = function (view) {
 
 Ui.prototype.paintStatus = function (view) {
   if (!this.elStatus) return;
-  this.elStatus.textContent = view.statusText || "";
+  const text = view.statusText || "";
+  if (text.indexOf("\n") >= 0) {
+    this.elStatus.innerHTML = text.replace(/\n/g, "<br>");
+    this.elStatus.style.whiteSpace = "normal";
+  } else {
+    this.elStatus.textContent = text;
+    this.elStatus.style.whiteSpace = "";
+  }
   this.elStatus.className = view.statusClass || "";
 };
 
