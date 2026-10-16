@@ -79,9 +79,13 @@ Ui.prototype.paintHud = function (view) {
       const c = Math.round((+view.plan.centered || 0) * 100);
       const f = Math.round((+view.plan.tight || 0) * 100);
       const t = Math.round((+view.plan.thin || 0) * 100);
+      const ov = Math.round((+view.plan.overlap || 0) * 100);
+      const st = Math.round((+view.plan.stronger || 0) * 100);
       const pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      
       label += "<br>(C:" + pad(c) + ",F:" + pad(f) + ",T:" + pad(t);
-      if (view.plan.area != null) label += ",A:" + view.plan.area;
+      label += ",A:" + view.plan.area;      
+      label += ",O:" + pad(ov) + ",S:" + pad(st);
       label += ")";
     }
     this.elWave.innerHTML = label;
@@ -140,8 +144,11 @@ Ui.prototype.makeCard = function (card, index) {
   const tightPct = Math.round((+plan.tight || 0) * 100);
   const centeredPct = Math.round((+plan.centered || 0) * 100);
   const thinPct = Math.round((+plan.thin || 0) * 100);
+  const ovPct = Math.round((+plan.overlap || 0) * 100);
+  const stPct = Math.round((+plan.stronger || 0) * 100);
   let metaText = "Center:" + centeredPct + "  Flush:" + tightPct + "<br>"
-    + "Trim:" + thinPct + "  Area:" + plan.area;
+    + "Trim:" + thinPct + "  Area:" + plan.area
+    + "<br>Overlap:" + ovPct + "  Strong:" + stPct;
   meta.innerHTML = metaText;
   btn.appendChild(meta);
 

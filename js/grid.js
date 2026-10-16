@@ -131,8 +131,14 @@ Grid.prototype.apply = function (cells) {
   for (let i = 0; i < cells.length; i++) {
     const cell = this.at(cells[i].r, cells[i].c);
     if (!cell) continue;
-    if (cell.is("horde")) cell.setType("cleared");
-    else if (cell.is("city")) {
+    if (cell.is("horde")) {
+      if (cell.strength > 1) {
+        cell.strength--;
+        if (cell.strength < 1) cell.strength = 1;
+      } else {
+        cell.setType("cleared");
+      }
+    } else if (cell.is("city")) {
       cell.setType("ruined");
       ruined = true;
     } else if (cell.is("grass")) cell.setType("scorched");
@@ -208,8 +214,28 @@ Grid.prototype.dress = function () {
   Cell.dressGrid(this);
 };
 
+Grid.prototype.strengths = function () {
+  const rows = [];
+  for (let r = 0; r < this.rows; r++) {
+    const row = [];
+    for (let c = 0; c < this.cols; c++) row.push(this.cells[r][c].strength || 1);
+    rows.push(row);
+  }
+  return rows;
+};
+
+Grid.prototype.writeStrengths = function (rows) {
+  if (!rows) return;
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
+      const st = rows[r] && rows[r][c];
+      this.cells[r][c].strength = st > 1 ? st : 1;
+    }
+  }
+};
+
 Grid.prototype.dump = function () {
-  return { rows: this.rows, cols: this.cols, cells: this.types(), anchors: this.anchors || [] };
+  return { rows: this.rows, cols: this.cols, cells: this.types(), strengths: this.strengths(), anchors: this.anchors || [] };
 };
 
 Grid.load = function (data) {
@@ -219,6 +245,7 @@ Grid.load = function (data) {
   if (!rows || !cols) return null;
   const grid = new Grid(rows, cols);
   grid.writeTypes(data.cells);
+  if (data.strengths) grid.writeStrengths(data.strengths);
   grid.anchors = Array.isArray(data.anchors) ? data.anchors : [];
   grid.dress();
   return grid;

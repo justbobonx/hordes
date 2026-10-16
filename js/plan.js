@@ -3,7 +3,7 @@
 function Plan() {}
 
 Plan.blank = function () {
-  return { wave: 1, rows: 6, cols: 6, stamps: ["33"], fuelChance: 0 };
+  return { wave: 1, rows: 6, cols: 6, stamps: ["33"], fuelChance: 0, overlap: 0, stronger: 0 };
 };
 
 Plan.copy = function (plan) {
@@ -52,6 +52,16 @@ Plan.copy = function (plan) {
   fuelChance = +fuelChance;
   if (fuelChance < 0) fuelChance = 0;
   if (fuelChance > 1) fuelChance = 1;
+  let overlap = plan.overlap;
+  if (overlap == null || overlap !== overlap) overlap = 0;
+  overlap = +overlap;
+  if (overlap < 0) overlap = 0;
+  if (overlap > 1) overlap = 1;
+  let stronger = plan.stronger;
+  if (stronger == null || stronger !== stronger) stronger = 0;
+  stronger = +stronger;
+  if (stronger < 0) stronger = 0;
+  if (stronger > 1) stronger = 1;
   const out = {
     wave: wave,
     rows: rows,
@@ -62,6 +72,8 @@ Plan.copy = function (plan) {
     tight: tight,
     thin: thin,
     fuelChance: fuelChance,
+    overlap: overlap,
+    stronger: stronger,
   };
   if (area != null) out.area = area;
   return out;

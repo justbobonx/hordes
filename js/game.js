@@ -232,7 +232,14 @@ Game.prototype.beginWave = function (plan) {
   this.plan = Plan.copy(plan);
   this.grid = GridBuilder.build(this.plan);
   this.initial = this.grid.types();
+  this.initialStrength = [];
+  for (let r = 0; r < this.grid.rows; r++) {
+    const row = [];
+    for (let c = 0; c < this.grid.cols; c++) row.push(this.grid.at(r, c).strength || 1);
+    this.initialStrength.push(row);
+  }
   this.grid.writeTypes(this.initial);
+  this.restoreStrength(this.initialStrength);
   this.queue = this.plan.stamps.slice();
   this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
   this.remAnchors = this.anchors.slice();
@@ -252,6 +259,8 @@ Game.prototype.restore = function (data) {
   this.abortActions();
   this.grid = Grid.load(data);
   this.initial = data.initial || this.grid.types();
+  this.initialStrength = data.initialStrength || null;
+  if (data.strengths && this.grid.writeStrengths) this.grid.writeStrengths(data.strengths);
   this.queue = Array.isArray(data.queue) ? data.queue.slice() : [];
   this.anchors = this.grid.anchors ? this.grid.anchors.slice() : [];
   this.remAnchors = this.anchors.slice();
@@ -270,10 +279,24 @@ Game.prototype.restore = function (data) {
   if (this.ended) this.pauseClock();
 };
 
+
+Game.prototype.restoreStrength = function (strengths) {
+  if (!this.grid || !strengths) return;
+  for (let r = 0; r < this.grid.rows; r++) {
+    for (let c = 0; c < this.grid.cols; c++) {
+      const cell = this.grid.at(r, c);
+      if (!cell) continue;
+      const st = strengths[r] && strengths[r][c];
+      cell.strength = st > 1 ? st : 1;
+    }
+  }
+};
+
 Game.prototype.resetWave = function () {
   if (!this.grid || !this.initial) return;
   this.abortActions();
   this.grid.writeTypes(this.initial);
+  if (this.initialStrength) this.restoreStrength(this.initialStrength);
   this.queue = this.plan.stamps.slice();
   this.remAnchors = this.anchors.slice();
   this.lost = false;
@@ -729,8 +752,10 @@ Game.prototype.persist = function () {
     rows: this.grid.rows,
     cols: this.grid.cols,
     cells: this.grid.types(),
+    strengths: this.grid.strengths(),
     anchors: this.anchors,
     initial: this.initial,
+    initialStrength: this.initialStrength,
     queue: this.queue.slice(),
     remAnchors: this.remAnchors.slice(),
     plan: this.plan,
@@ -740,4 +765,5 @@ Game.prototype.persist = function () {
     testPlan: this.testPlan,
   });
 };
+
 

@@ -4,6 +4,7 @@ function Planner() {}
 
 const EXTRAS_UNLOCK = {
   fuel: { minlevel: 10, onPlan: 0.6, range: [0.2, 0.5] },
+  strength: { onPlan: 0.5 },
   // barrier
 };
 
@@ -19,7 +20,7 @@ Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
   const scripted = Planner.INTRO[w];
   if (scripted) {
-    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open, thin: scripted.thin, fuelChance: 0 }), locked: false }];
+    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open, thin: scripted.thin, fuelChance: 0, overlap: 0, stronger: 0 }), locked: false }];
   }
   let base = 4;
   let hold = 3;
@@ -77,6 +78,12 @@ Planner.offer = function (wave) {
     const hi = EXTRAS_UNLOCK.fuel.range[1];
     fuelChance = lo + Math.random() * (hi - lo);
   }
+  let overlap = 0;
+  let stronger = 0;
+  // if (Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
+    // overlap = Math.random();
+    // stronger = Math.random();
+  // }
   return [{
     plan: Plan.copy({
       wave: w,
@@ -89,6 +96,8 @@ Planner.offer = function (wave) {
       thin: Math.random(),
       area: a,
       fuelChance: fuelChance,
+      overlap: overlap,
+      stronger: stronger,
     }),
     locked: false,
   }];
