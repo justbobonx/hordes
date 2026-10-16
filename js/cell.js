@@ -52,6 +52,7 @@ function Cell(type) {
   this.groupId = null;
   this.seed = (Math.random() * 0xffffffff) >>> 0;
   this.phase = Math.random() * Math.PI * 2;
+  this.strength = 1;
   this.dress();
 }
 
@@ -61,6 +62,7 @@ Cell.prototype.is = function (name) {
 
 Cell.prototype.setType = function (name) {
   this.type = CELL_TYPES[name] ? name : "grass";
+  if (this.type !== "horde") this.strength = 1;
   this.dress();
 };
 
@@ -160,5 +162,14 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.moveTo(x + size - pad, y + pad);
     ctx.lineTo(x + pad, y + size - pad);
     ctx.stroke();
+  }
+
+  // Strength number for multi-hit horde
+  if (this.type === "horde" && this.strength > 1) {
+    ctx.fillStyle = "#e5ce7a";
+    ctx.font = size + "px m5x7, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(this.strength), x + size / 2, y + size / 2 + 1);
   }
 };
