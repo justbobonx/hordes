@@ -398,6 +398,7 @@ Game.prototype.onHint = function () {
       best = i;
     }
   }
+  best = 0; //overwrite to just next for now
   if (best < 0) return;
   const seat = this.remAnchors[best];
   this.selectedQ = best;
