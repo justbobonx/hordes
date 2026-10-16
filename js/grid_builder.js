@@ -43,8 +43,8 @@ GridBuilder.build = function (plan) {
     const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
     if (!built) continue;
     GridBuilder.paintCities(built.grid, stamps.length);
-    GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.stampKeep, thin);
-    GridBuilder.promote(built.grid, built.cover, built.stampsOn, built.strongKeep, plan.stronger || 0);
+    GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
+    GridBuilder.promote(built.grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
     built.grid.anchors = built.anchors || [];
     built.grid.dress();
     return built.grid;
@@ -63,8 +63,8 @@ GridBuilder.build = function (plan) {
     grid.anchors = [{ row: midR, col: midC }];
   } else {
     GridBuilder.paintCities(grid, stamps.length);
-    GridBuilder.thin(grid, built.cover, built.sole, built.own, built.stampKeep, thin);
-    GridBuilder.promote(grid, built.cover, built.stampsOn, built.strongKeep, plan.stronger || 0);
+    GridBuilder.thin(grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
+    GridBuilder.promote(grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
     grid.anchors = built.anchors || [];
   }
   if (!built) GridBuilder.paintCities(grid, stamps.length);
@@ -95,8 +95,8 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     stampsOn.push(son);
   }
   const own = [];
-  const stampKeep = [];      // uniqueKeep
-  const strongKeep = [];
+  const uniqueMin = [];
+  const strongCount = [];
   const blobSize = [];
   const anchors = [];
   let nextBlob = 0;
@@ -114,7 +114,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     const left = stamps.length - i;
     const canNew = left >= deficit + MIN_BLOB_SIZE;
     const wantNew = i > 0 && canNew && Math.random() < 0.5;
-    const placed = GridBuilder.dropStamp(grid, stamps[i], nextId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, stampKeep, strongKeep, blobSize, nextBlob, stampsOn, overlap);
+    const placed = GridBuilder.dropStamp(grid, stamps[i], nextId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
     anchors.push({ row: placed.row, col: placed.col });
     if (placed.spawned) nextBlob++;
@@ -129,7 +129,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
       }
     }
     while (fuelChance > 0 && Math.random() < fuelChance && lastSole.length) {
-      const fuel = GridBuilder.tryPlaceFuel(grid, lastId, lastSole, lastAnchor, cover, sole, blobAt, own, stampKeep, strongKeep, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols);
+      const fuel = GridBuilder.tryPlaceFuel(grid, lastId, lastSole, lastAnchor, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols);
       if (!fuel) break;
       lastId = fuel.id;
       lastAnchor = fuel.anchor;
@@ -138,11 +138,11 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
       nextId++;
     }
   }
-  return { grid: grid, blobAt: blobAt, anchors: anchors, cover: cover, sole: sole, own: own, stampKeep: stampKeep, strongKeep: strongKeep, stampsOn: stampsOn };
+  return { grid: grid, blobAt: blobAt, anchors: anchors, cover: cover, sole: sole, own: own, uniqueMin: uniqueMin, strongCount: strongCount, stampsOn: stampsOn };
 };
 
-GridBuilder.thin = function (grid, cover, sole, own, stampKeep, thin) {
-  if (!thin || thin <= 0 || !cover || !sole || !own || !stampKeep) return;
+GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
+  if (!thin || thin <= 0 || !cover || !sole || !own || !uniqueMin) return;
   const rows = grid.rows;
   const cols = grid.cols;
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -157,7 +157,7 @@ GridBuilder.thin = function (grid, cover, sole, own, stampKeep, thin) {
     return n;
  }
   const remaining = [];
-  for (let s = 0; s < own.length; s++) remaining[s] = Math.max(0, (own[s] || 0) - (stampKeep[s] || 0));
+  for (let s = 0; s < own.length; s++) remaining[s] = Math.max(0, (own[s] || 0) - (uniqueMin[s] || 0));
   let initial = 0;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -203,19 +203,18 @@ GridBuilder.thin = function (grid, cover, sole, own, stampKeep, thin) {
   }
 };
 
-GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, stampKeep, strongKeep, blobSize, nextBlob, stampsOn, overlap) {
+GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap) {
   const rows = grid.rows;
   const cols = grid.cols;
   const shape = Grid.STAMP_DEFINITIONS[kind];
   const full = shape.w * shape.h;
   const ss = Math.min(shape.w, shape.h);
-  const uniqueKeep = ss;
-  const overallKeep = ss + (overlap || 0) * (full - ss);
-  let strongK = Math.max(0, overallKeep - uniqueKeep);
-  // noise ±1-2 but respect floor
+  const uniqueMinVal = full - ss;
+  const ov = overlap || 0;
+  const overlapMin = uniqueMinVal * (1 - ov);
+  let strongN = Math.max(0, uniqueMinVal - overlapMin);
   const noise = (Math.random() < 0.5 ? -1 : 1) * ((Math.random() * 2) | 0);
-  strongK = Math.max(0, Math.min(full - uniqueKeep, strongK + noise));
-  const keep = uniqueKeep;
+  strongN = Math.max(0, Math.min(uniqueMinVal, strongN + noise));
   const rowAnchors = [];
   const colAnchors = [];
   if (shape && shape.h & 1) {
@@ -288,9 +287,12 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
         if (!inside) mark(blobAt[rr][cc], rr, cc);
       }
     }
-    if (fresh < keep) return;
+    if (cells.length < uniqueMinVal) return;
+    const overlapping = fresh < cells.length;
+    const need = overlapping ? overlapMin : uniqueMinVal;
+    if (fresh < need) return;
     for (let s = 0; s < id; s++) {
-      if (own[s] - (lost[s] || 0) < stampKeep[s]) return;
+      if (own[s] - (lost[s] || 0) < uniqueMin[s]) return;
     }
     const hits = [];
     const grazes = [];
@@ -317,16 +319,16 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       } else if (openSeat === "inner") {
         if (edge) return;
       }
-      legal.push({ cells: cells, hits: [], join: nextBlob, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
+      legal.push({ cells: cells, hits: [], join: nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
       return;
     }
     if (wantNew) {
-      legal.push({ cells: cells, hits: grazes, join: grazes.length ? grazes[0] : nextBlob, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
+      legal.push({ cells: cells, hits: grazes, join: grazes.length ? grazes[0] : nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
       return;
     }
     if (join < 0) return;
     if (small && !(blobSize[join] && blobSize[join] < MIN_BLOB_SIZE)) return;
-    legal.push({ cells: cells, hits: hits, join: join, fr: freshR / fresh, fc: freshC / fresh, row: row, col: col });
+    legal.push({ cells: cells, hits: hits, join: join, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
   }
 
   function flushOf(seat) {
@@ -446,8 +448,8 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     }
   }
   blobSize[keeper] = (blobSize[keeper] || 0) + 1;
-  stampKeep[id] = keep;
-  strongKeep[id] = strongK;
+  uniqueMin[id] = uniqueMinVal;
+  strongCount[id] = strongN;
   own[id] = 0;
   for (let i = 0; i < pick.cells.length; i++) {
     const r = pick.cells[i].r;
@@ -470,7 +472,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       blobAt[r][c] = keeper;
     }
   }
-  if (own[id] < keep) return null;
+  if (own[id] < (pick.need || 0)) return null;
   return { spawned: spawned, row: pick.row, col: pick.col };
 };
 
@@ -623,23 +625,23 @@ GridBuilder.paintCities = function (grid, np) {
   }
 };
 
-GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover, sole, blobAt, own, stampKeep, strongKeep, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols) {
+GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols) {
   const FUEL_W = 3;
   const FUEL_H = 3;
   const full = FUEL_W * FUEL_H;
   const ss = Math.min(FUEL_W, FUEL_H);
-  const uniqueKeep = ss;
-  const overallKeep = ss + (overlap || 0) * (full - ss);
-  let strongK = Math.max(0, overallKeep - uniqueKeep);
+  const uniqueMinVal = full - ss;
+  const ov = overlap || 0;
+  const overlapMin = uniqueMinVal * (1 - ov);
+  let strongN = Math.max(0, uniqueMinVal - overlapMin);
   const noise = (Math.random() < 0.5 ? -1 : 1) * ((Math.random() * 2) | 0);
-  strongK = Math.max(0, Math.min(full - uniqueKeep, strongK + noise));
-  const keep = uniqueKeep;
+  strongN = Math.max(0, Math.min(uniqueMinVal, strongN + noise));
   const legal = [];
   for (let ci = 0; ci < candidates.length; ci++) {
     const fuelCell = candidates[ci];
     if (cover[fuelCell.r][fuelCell.c] !== 1 || sole[fuelCell.r][fuelCell.c] !== prevId) continue;
     const cells = Grid.fuelFootprint(rows, cols, fuelCell.r, fuelCell.c, prevAnchor.r, prevAnchor.c);
-    if (!cells.length) continue;
+    if (cells.length < uniqueMinVal) continue;
     let fresh = 0;
     const lost = [];
     for (let i = 0; i < cells.length; i++) {
@@ -651,20 +653,22 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
         if (owner >= 0) lost[owner] = (lost[owner] || 0) + 1;
       }
     }
-    if (fresh < 1) continue;
+    const overlapping = fresh < cells.length;
+    const need = overlapping ? overlapMin : uniqueMinVal;
+    if (fresh < need) continue;
     let ok = true;
     for (let s = 0; s < own.length; s++) {
       if (s === prevId) continue;
-      if ((own[s] || 0) - (lost[s] || 0) < (stampKeep[s] || 0)) { ok = false; break; }
+      if ((own[s] || 0) - (lost[s] || 0) < (uniqueMin[s] || 0)) { ok = false; break; }
     }
     if (!ok) continue;
-    legal.push({ cells: cells, fuelCell: fuelCell, fresh: fresh });
+    legal.push({ cells: cells, fuelCell: fuelCell, fresh: fresh, need: need });
   }
   if (!legal.length) return null;
   const pick = legal[(Math.random() * legal.length) | 0];
   const id = nextId;
-  stampKeep[id] = keep;
-  strongKeep[id] = strongK;
+  uniqueMin[id] = uniqueMinVal;
+  strongCount[id] = strongN;
   own[id] = 0;
   const soleCells = [];
   let spawned = true;
@@ -694,17 +698,17 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
       if (isFuel) cell.setType("fuel");
     }
   }
-  if (own[id] < keep) return null;
+  if (own[id] < (pick.need || 0)) return null;
   blobSize[keeper] = (blobSize[keeper] || 0) + 1;
   return { id: id, soleCells: soleCells, spawned: spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c } };
 };
 
 
-GridBuilder.promote = function (grid, cover, stampsOn, strongKeep, stronger) {
-  if (!stronger || stronger <= 0 || !stampsOn || !strongKeep) return;
+GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
+  if (!stronger || stronger <= 0 || !stampsOn || !strongCount) return;
   const rows = grid.rows;
   const cols = grid.cols;
-  const deficit = strongKeep.slice();
+  const deficit = strongCount.slice();
   for (let i = 0; i < deficit.length; i++) {
     if (!deficit[i]) deficit[i] = 0;
   }
