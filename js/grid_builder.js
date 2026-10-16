@@ -203,6 +203,93 @@ GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
   }
 };
 
+
+// Shared safety check for a concrete footprint.
+// Same rules a normal stamp uses: size, fresh minimum, uniqueMin protection for every earlier piece.
+// Returns {fresh, need} or null.
+GridBuilder.legalFootprint = function (cells, id, uniqueMinVal, overlap, cover, sole, own, uniqueMin) {
+  if (!cells || !cells.length || !uniqueMinVal) return null;
+  const ov = overlap || 0;
+  const overlapMin = uniqueMinVal * (1 - ov);
+  let fresh = 0;
+  const lost = [];
+  for (let i = 0; i < cells.length; i++) {
+    const r = cells[i].r;
+    const c = cells[i].c;
+    if (cover[r][c] === 0) fresh++;
+    else if (cover[r][c] === 1) {
+      const owner = sole[r][c];
+      if (owner >= 0) lost[owner] = (lost[owner] || 0) + 1;
+    }
+  }
+  if (cells.length < uniqueMinVal) return null;
+  const overlapping = fresh < cells.length;
+  const need = overlapping ? overlapMin : uniqueMinVal;
+  if (fresh < need) return null;
+  for (let s = 0; s < id; s++) {
+    if ((own[s] || 0) - (lost[s] || 0) < (uniqueMin[s] || 0)) return null;
+  }
+  return { fresh: fresh, need: need };
+};
+
+// Shared commit. Writes cover/sole/own/blob/type exactly as a normal stamp.
+// fuelCell ({r,c} or null): that one cell becomes fuel, everything else horde.
+// joinBlob: blob to join, or nextBlob to spawn. hits: other blobs to merge in.
+// Returns {spawned, soleCells} .
+GridBuilder.commitPiece = function (grid, cells, id, uniqueMinVal, strongN, joinBlob, hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, fuelCell) {
+  const rows = grid.rows;
+  const cols = grid.cols;
+  let keeper = joinBlob;
+  let spawned = keeper === nextBlob;
+  if (hits && hits.length) {
+    spawned = false;
+    if (hits.indexOf(keeper) < 0) keeper = hits[0];
+    for (let h = 0; h < hits.length; h++) {
+      const other = hits[h];
+      if (other === keeper) continue;
+      blobSize[keeper] = (blobSize[keeper] || 0) + (blobSize[other] || 0);
+      blobSize[other] = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (blobAt[r][c] === other) blobAt[r][c] = keeper;
+        }
+      }
+    }
+  }
+  blobSize[keeper] = (blobSize[keeper] || 0) + 1;
+  uniqueMin[id] = uniqueMinVal;
+  strongCount[id] = strongN;
+  own[id] = 0;
+  const soleCells = [];
+  for (let i = 0; i < cells.length; i++) {
+    const r = cells[i].r;
+    const c = cells[i].c;
+    const cell = grid.at(r, c);
+    const isFuel = fuelCell && r === fuelCell.r && c === fuelCell.c;
+    stampsOn[r][c].push(id);
+    if (cover[r][c] === 0) {
+      cover[r][c] = 1;
+      sole[r][c] = id;
+      blobAt[r][c] = keeper;
+      own[id]++;
+      soleCells.push({ r: r, c: c });
+      if (!cell.is("horde") && !cell.is("fuel")) cell.setType(isFuel ? "fuel" : "horde");
+      else if (isFuel) cell.setType("fuel");
+    } else if (cover[r][c] === 1) {
+      own[sole[r][c]]--;
+      sole[r][c] = -1;
+      cover[r][c] = 2;
+      blobAt[r][c] = keeper;
+      if (isFuel) cell.setType("fuel");
+    } else {
+      cover[r][c]++;
+      blobAt[r][c] = keeper;
+      if (isFuel) cell.setType("fuel");
+    }
+  }
+  return { spawned: spawned, soleCells: soleCells };
+};
+
 GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap) {
   const rows = grid.rows;
   const cols = grid.cols;
@@ -251,7 +338,6 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     let fresh = 0;
     let freshR = 0;
     let freshC = 0;
-    const lost = [];
     const touch = [];
     function mark(blob, r, c) {
       if (blob < 0) return;
@@ -268,10 +354,6 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
         freshC += c;
       } else {
         mark(blobAt[r][c], r, c);
-        if (cover[r][c] === 1) {
-          const owner = sole[r][c];
-          lost[owner] = (lost[owner] || 0) + 1;
-        }
       }
     }
     for (let i = 0; i < cells.length; i++) {
@@ -287,13 +369,9 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
         if (!inside) mark(blobAt[rr][cc], rr, cc);
       }
     }
-    if (cells.length < uniqueMinVal) return;
-    const overlapping = fresh < cells.length;
-    const need = overlapping ? overlapMin : uniqueMinVal;
-    if (fresh < need) return;
-    for (let s = 0; s < id; s++) {
-      if (own[s] - (lost[s] || 0) < uniqueMin[s]) return;
-    }
+    const check = GridBuilder.legalFootprint(cells, id, uniqueMinVal, overlap, cover, sole, own, uniqueMin);
+    if (!check) return;
+    const need = check.need;
     const hits = [];
     const grazes = [];
     let join = -1;
@@ -430,50 +508,9 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       break;
     }
   }
-  let keeper = pick.join;
-  let spawned = keeper === nextBlob;
-  if (pick.hits.length) {
-    spawned = false;
-    if (pick.hits.indexOf(keeper) < 0) keeper = pick.hits[0];
-    for (let h = 0; h < pick.hits.length; h++) {
-      const other = pick.hits[h];
-      if (other === keeper) continue;
-      blobSize[keeper] = (blobSize[keeper] || 0) + (blobSize[other] || 0);
-      blobSize[other] = 0;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          if (blobAt[r][c] === other) blobAt[r][c] = keeper;
-        }
-      }
-    }
-  }
-  blobSize[keeper] = (blobSize[keeper] || 0) + 1;
-  uniqueMin[id] = uniqueMinVal;
-  strongCount[id] = strongN;
-  own[id] = 0;
-  for (let i = 0; i < pick.cells.length; i++) {
-    const r = pick.cells[i].r;
-    const c = pick.cells[i].c;
-    const cell = grid.at(r, c);
-    stampsOn[r][c].push(id);
-    if (cover[r][c] === 0) {
-      cover[r][c] = 1;
-      sole[r][c] = id;
-      blobAt[r][c] = keeper;
-      own[id]++;
-      if (!cell.is("horde") && !cell.is("fuel")) cell.setType("horde");
-    } else if (cover[r][c] === 1) {
-      own[sole[r][c]]--;
-      sole[r][c] = -1;
-      cover[r][c] = 2;
-      blobAt[r][c] = keeper;
-    } else {
-      cover[r][c]++;
-      blobAt[r][c] = keeper;
-    }
-  }
-  if (own[id] < (pick.need || 0)) return null;
-  return { spawned: spawned, row: pick.row, col: pick.col };
+  const committed = GridBuilder.commitPiece(grid, pick.cells, id, uniqueMinVal, strongN, pick.join, pick.hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, null);
+  if (!committed || own[id] < (pick.need || 0)) return null;
+  return { spawned: committed.spawned, row: pick.row, col: pick.col };
 };
 
 GridBuilder.paintCities = function (grid, np) {
@@ -626,81 +663,83 @@ GridBuilder.paintCities = function (grid, np) {
 };
 
 GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols) {
-  const FUEL_W = 3;
-  const FUEL_H = 3;
-  const full = FUEL_W * FUEL_H;
-  const ss = Math.min(FUEL_W, FUEL_H);
-  const uniqueMinVal = full - ss;
+  // Fuel is a 3x3 stamp. Candidates come from the last piece's sole cells.
+  // Each candidate produces one footprint via fuelFootprint; that footprint
+  // then faces the same legality and commit path a normal stamp uses.
+  const FUEL_FULL = 9;
+  const FUEL_SS = 3;
+  const uniqueMinVal = FUEL_FULL - FUEL_SS;
   const ov = overlap || 0;
   const overlapMin = uniqueMinVal * (1 - ov);
   let strongN = Math.max(0, uniqueMinVal - overlapMin);
   const noise = (Math.random() < 0.5 ? -1 : 1) * ((Math.random() * 2) | 0);
   strongN = Math.max(0, Math.min(uniqueMinVal, strongN + noise));
+
+  const order = candidates.slice();
+  GridBuilder.shuffle(order);
+
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   const legal = [];
-  for (let ci = 0; ci < candidates.length; ci++) {
-    const fuelCell = candidates[ci];
+  for (let ci = 0; ci < order.length; ci++) {
+    const fuelCell = order[ci];
     if (cover[fuelCell.r][fuelCell.c] !== 1 || sole[fuelCell.r][fuelCell.c] !== prevId) continue;
     const cells = Grid.fuelFootprint(rows, cols, fuelCell.r, fuelCell.c, prevAnchor.r, prevAnchor.c);
-    if (cells.length < uniqueMinVal) continue;
-    let fresh = 0;
-    const lost = [];
+    const check = GridBuilder.legalFootprint(cells, nextId, uniqueMinVal, overlap, cover, sole, own, uniqueMin);
+    if (!check) continue;
+
+    // Touch detection so commit can join/merge blobs the same way a stamp does.
+    // The fuel cell already sits in the parent blob, so join is guaranteed.
+    const touch = [];
+    function mark(blob, r, c) {
+      if (blob < 0) return;
+      if (!touch[blob]) touch[blob] = [];
+      const key = r + "," + c;
+      if (touch[blob].indexOf(key) < 0) touch[blob].push(key);
+    }
     for (let i = 0; i < cells.length; i++) {
-      const rr = cells[i].r;
-      const cc = cells[i].c;
-      if (cover[rr][cc] === 0) fresh++;
-      else if (cover[rr][cc] === 1) {
-        const owner = sole[rr][cc];
-        if (owner >= 0) lost[owner] = (lost[owner] || 0) + 1;
+      const r = cells[i].r;
+      const c = cells[i].c;
+      if (cover[r][c] > 0) mark(blobAt[r][c], r, c);
+      for (let d = 0; d < 4; d++) {
+        const rr = r + dirs[d][0];
+        const cc = c + dirs[d][1];
+        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+        if (cover[rr][cc] === 0) continue;
+        let inside = false;
+        for (let k = 0; k < cells.length; k++) {
+          if (cells[k].r === rr && cells[k].c === cc) inside = true;
+        }
+        if (!inside) mark(blobAt[rr][cc], rr, cc);
       }
     }
-    const overlapping = fresh < cells.length;
-    const need = overlapping ? overlapMin : uniqueMinVal;
-    if (fresh < need) continue;
-    let ok = true;
-    for (let s = 0; s < own.length; s++) {
-      if (s === prevId) continue;
-      if ((own[s] || 0) - (lost[s] || 0) < (uniqueMin[s] || 0)) { ok = false; break; }
+    const hits = [];
+    let join = blobAt[fuelCell.r][fuelCell.c];
+    if (join < 0) join = nextBlob;
+    for (let b = 0; b < touch.length; b++) {
+      if (!touch[b] || touch[b].length < 2) continue;
+      hits.push(b);
     }
-    if (!ok) continue;
-    legal.push({ cells: cells, fuelCell: fuelCell, fresh: fresh, need: need });
+    legal.push({ cells: cells, fuelCell: fuelCell, fresh: check.fresh, need: check.need, join: join, hits: hits });
   }
   if (!legal.length) return null;
-  const pick = legal[(Math.random() * legal.length) | 0];
-  const id = nextId;
-  uniqueMin[id] = uniqueMinVal;
-  strongCount[id] = strongN;
-  own[id] = 0;
-  const soleCells = [];
-  let spawned = true;
-  const keeper = nextBlob;
-  for (let i = 0; i < pick.cells.length; i++) {
-    const r = pick.cells[i].r;
-    const c = pick.cells[i].c;
-    const cell = grid.at(r, c);
-    const isFuel = r === pick.fuelCell.r && c === pick.fuelCell.c;
-    stampsOn[r][c].push(id);
-    if (cover[r][c] === 0) {
-      cover[r][c] = 1;
-      sole[r][c] = id;
-      blobAt[r][c] = keeper;
-      own[id]++;
-      soleCells.push({ r: r, c: c });
-      cell.setType(isFuel ? "fuel" : "horde");
-    } else if (cover[r][c] === 1) {
-      own[sole[r][c]]--;
-      sole[r][c] = -1;
-      cover[r][c] = 2;
-      blobAt[r][c] = keeper;
-      if (isFuel) cell.setType("fuel");
-    } else {
-      cover[r][c]++;
-      blobAt[r][c] = keeper;
-      if (isFuel) cell.setType("fuel");
+
+  // Weight by fresh cell count: more new horde is better.
+  let total = 0;
+  for (let i = 0; i < legal.length; i++) total += legal[i].fresh;
+  if (total <= 0) return null;
+  let roll = Math.random() * total;
+  let pick = legal[legal.length - 1];
+  for (let i = 0; i < legal.length; i++) {
+    roll -= legal[i].fresh;
+    if (roll <= 0) {
+      pick = legal[i];
+      break;
     }
   }
-  if (own[id] < (pick.need || 0)) return null;
-  blobSize[keeper] = (blobSize[keeper] || 0) + 1;
-  return { id: id, soleCells: soleCells, spawned: spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c } };
+
+  const committed = GridBuilder.commitPiece(grid, pick.cells, nextId, uniqueMinVal, strongN, pick.join, pick.hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, pick.fuelCell);
+  if (!committed || own[nextId] < (pick.need || 0)) return null;
+  return { id: nextId, soleCells: committed.soleCells, spawned: committed.spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c } };
 };
 
 
@@ -806,6 +845,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 
