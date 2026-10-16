@@ -397,21 +397,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   let total = 0;
   for (let i = 0; i < legal.length; i++) {
     const seat = legal[i];
-    let affinity = near(seat.fr, seat.fc, midR, midC);
-    if (!first && seat.join !== nextBlob) {
-      let n = 0;
-      let br = 0;
-      let bc = 0;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          if (blobAt[r][c] !== seat.join) continue;
-          n++;
-          br += r;
-          bc += c;
-        }
-      }
-      if (n) affinity = affinity * 0.5 + near(seat.fr, seat.fc, br / n, bc / n) * 0.5;
-    }
+    const affinity = near(seat.fr, seat.fc, midR, midC);
     const flush = flushOf(seat);
     const noise = 0.6 + Math.random() * 0.4;
     seat.weight = ((1 - centered) + centered * affinity) * ((1 - tight) + tight * flush) * noise;
@@ -696,6 +682,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 
