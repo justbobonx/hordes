@@ -679,7 +679,7 @@ Game.prototype.statusView = function () {
   } else {
     if (hordeGone && cities === 0) {
       const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
-      const tries = this.resets | 0;
+      const tries = 1 + this.resets;
       text = "HORDE DESTROYED!\nTIME: " + this.formatTime(elapsed) + "   TRIES: " + tries;
       cls = "status-green";
     } else if (hordeGone && cities > 0) {

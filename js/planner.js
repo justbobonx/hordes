@@ -33,16 +33,26 @@ Planner.offer = function (wave) {
       locked: false
     }];
   }
+  //piece count per wave size from calculated base plus rando range
+  // 1-8   | 4 | 2–4 |
+  // 9–12  | 5 | 3–5 |
+  // 13–17 | 6 | 4–6 |
+  // 18-23 | 7 | 5–7 |
+  // 24-30 | 8 | 5–8 |
+  // 31+   | 9 | 5–9 |
+
   let base = 4;
   let hold = 3;
   let at = 6;
-  while (w >= at + hold && base < 7) {
+  while (w >= at + hold && base < 9) {
     at += hold;
     base++;
     hold = base - 1;
   }
-  let count = base + ((Math.random() * 5) | 0) - 2;
+  let sub = base <= 7 ? 2 : base - 5;
+  let count = base + (((Math.random() * (sub + 1)) | 0) - sub);
   if (count < 1) count = 1;
+  
   const pool = [];
   const ids = Object.keys(Grid.STAMP_DEFINITIONS);
   for (let i = 0; i < ids.length; i++) {
