@@ -80,10 +80,10 @@ Planner.offer = function (wave) {
   }
   let overlap = 0;
   let stronger = 0;
-  // if (Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
-    // overlap = Math.random();
-    // stronger = Math.random();
-  // }
+  if (Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
+    overlap = .2*Math.random()*.6;
+    stronger = overlap + (1-overlap)*Math.random();
+  }
   return [{
     plan: Plan.copy({
       wave: w,

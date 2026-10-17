@@ -7,7 +7,7 @@ const USE_SPRITES = false;
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
-  city: { fill: "#2a62d0", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09 },
+  city: { fill: "#408dd8", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09 },
   horde: { fill: "#c4392f", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.15 },
   cleared: { fill: "#3f6242", mark: "#b8352c", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   cleared_hint: { fill: "#3f6242", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },

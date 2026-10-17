@@ -151,7 +151,7 @@ Ui.prototype.makeCard = function (card, index) {
   const stPct = Math.round((+plan.stronger || 0) * 100);
   let metaText = "Center:" + centeredPct + "  Flush:" + tightPct + "<br>"
     + "Trim:" + thinPct + "  Area:" + plan.area + "<br>"
-    + "Fuel:" + fuelPct + "  Overlap:" + fuelPct + "  Strong:" + stPct;
+    + "Fuel:" + fuelPct + "  Overlap:" + ovPct + "  Strong:" + stPct;
   meta.innerHTML = metaText;
   btn.appendChild(meta);
 
