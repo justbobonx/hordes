@@ -7,13 +7,13 @@ const USE_SPRITES = false;
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
-  city: { fill: "#408dd8", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09 },
+  city: { fill: "#2a7ecf", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#6aafeb" },
   horde: { fill: "#c4392f", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.15 },
   cleared: { fill: "#3f6242", mark: "#b8352c", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   cleared_hint: { fill: "#3f6242", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   ruined: { fill: "#3c4d72", mark: "#6e88ba", group: true, round: 1, vary: "group", varyAmount: 0.05 },
   barrier: { fill: "#664719", mark: null, group: false, round: 0.2, vary: "cell", varyAmount: 0.06 },
-  fuel: { fill: "#d6bf48", mark: null, group: false, round: 2, vary: "pulse", varyAmount: 0.08 },
+  fuel: { fill: "#d6bf48", mark: null, group: false, round: 2, vary: "pulse", varyAmount: 0.08, outline: "#de8830" },
 };
 
 function hexToRgb(hex) {
@@ -49,6 +49,7 @@ function Cell(type) {
   this.fill = CELL_TYPES.grass.fill;
   this.mark = null;
   this.round = [true, true, true, true];
+  this.outer = [true, true, true, true]; // top, right, bottom, left
   this.groupId = null;
   this.seed = (Math.random() * 0xffffffff) >>> 0;
   this.phase = Math.random() * Math.PI * 2;
@@ -97,6 +98,7 @@ Cell.dressGrid = function (grid) {
       const look = CELL_TYPES[cell.type] || CELL_TYPES.grass;
       if (!look.group) {
         cell.round = [true, true, true, true];
+        cell.outer = [true, true, true, true];
         continue;
       }
       const up = Cell.sameGroup(grid, cell, r - 1, c);
@@ -105,6 +107,8 @@ Cell.dressGrid = function (grid) {
       const right = Cell.sameGroup(grid, cell, r, c + 1);
       // TL, TR, BR, BL — round only outer corners of the group
       cell.round = [!(up || left), !(up || right), !(down || right), !(down || left)];
+      // top, right, bottom, left — outline only outer edges
+      cell.outer = [!up, !right, !down, !left];
     }
   }
 };
@@ -130,8 +134,8 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
   if (look.vary === "pulse") {
     const t = Date.now() / 1000;
     const s = Math.sin(t * (Math.PI * 2 / 3.2) + this.phase);
-    const base = look.varyAmount != null ? look.varyAmount : 0.12;
-    const amount = s >= 0 ? s * base * 0.6 : s * base * 1.3;
+    const baseAmt = look.varyAmount != null ? look.varyAmount : 0.12;
+    const amount = s >= 0 ? s * baseAmt * 0.6 : s * baseAmt * 1.3;
     fill = varyColor(look.fill, 0, amount);
   }
   ctx.fillStyle = fill;
@@ -142,6 +146,76 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.fill();
   } else {
     ctx.fillRect(ix, iy, is, is);
+  }
+
+  // Outline: different color, width scales with size, max 2px.
+  // Groups stroke only outer edges (shared edges stay clean), same idea as corner rounding.
+  if (look.outline && ctx.roundRect) {
+    const lw = Math.min(4, Math.max(2, size * 0.1));
+    const outer = this.outer || [true, true, true, true];
+    const r = corners;
+    ctx.strokeStyle = look.outline;
+    ctx.lineWidth = lw;
+    ctx.lineCap = "butt";
+    ctx.lineJoin = "round";
+
+    // Top
+    if (outer[0]) {
+      ctx.beginPath();
+      const sx = ix + (outer[3] && r[0] > 0 ? r[0] : 0);
+      const ex = ix + is - (outer[1] && r[1] > 0 ? r[1] : 0);
+      ctx.moveTo(sx, iy);
+      ctx.lineTo(ex, iy);
+      ctx.stroke();
+    }
+    // Right
+    if (outer[1]) {
+      ctx.beginPath();
+      const sy = iy + (outer[0] && r[1] > 0 ? r[1] : 0);
+      const ey = iy + is - (outer[2] && r[2] > 0 ? r[2] : 0);
+      ctx.moveTo(ix + is, sy);
+      ctx.lineTo(ix + is, ey);
+      ctx.stroke();
+    }
+    // Bottom
+    if (outer[2]) {
+      ctx.beginPath();
+      const sx = ix + is - (outer[1] && r[2] > 0 ? r[2] : 0);
+      const ex = ix + (outer[3] && r[3] > 0 ? r[3] : 0);
+      ctx.moveTo(sx, iy + is);
+      ctx.lineTo(ex, iy + is);
+      ctx.stroke();
+    }
+    // Left
+    if (outer[3]) {
+      ctx.beginPath();
+      const sy = iy + is - (outer[2] && r[3] > 0 ? r[3] : 0);
+      const ey = iy + (outer[0] && r[0] > 0 ? r[0] : 0);
+      ctx.moveTo(ix, sy);
+      ctx.lineTo(ix, ey);
+      ctx.stroke();
+    }
+    // Corner arcs (only when both adjacent sides are outer and radius > 0)
+    if (outer[0] && outer[3] && r[0] > 0) {
+      ctx.beginPath();
+      ctx.arc(ix + r[0], iy + r[0], r[0], Math.PI, Math.PI * 1.5, false);
+      ctx.stroke();
+    }
+    if (outer[0] && outer[1] && r[1] > 0) {
+      ctx.beginPath();
+      ctx.arc(ix + is - r[1], iy + r[1], r[1], Math.PI * 1.5, Math.PI * 2, false);
+      ctx.stroke();
+    }
+    if (outer[1] && outer[2] && r[2] > 0) {
+      ctx.beginPath();
+      ctx.arc(ix + is - r[2], iy + is - r[2], r[2], 0, Math.PI / 2, false);
+      ctx.stroke();
+    }
+    if (outer[2] && outer[3] && r[3] > 0) {
+      ctx.beginPath();
+      ctx.arc(ix + r[3], iy + is - r[3], r[3], Math.PI / 2, Math.PI, false);
+      ctx.stroke();
+    }
   }
 
   if (USE_SPRITES && sprites) {
