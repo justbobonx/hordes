@@ -4,28 +4,39 @@ function Planner() {}
 
 const EXTRAS_UNLOCK = {
   fuel: { minlevel: 10, onPlan: 0.6, range: [0.2, 0.5] },
-  strength: { onPlan: 0.5 },
+  strength: { minlevel: 10, onPlan: 0.5 },
   // barrier
 };
 
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin: 0 },
-  2: { cols: 6, rows: 7, stamps: ["33"], open: "clipped", thin: 0 },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "edge", thin: 0 },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", thin: 0 },
-  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", thin: 0 },
+  2: { cols: 6, rows: 7, stamps: ["33"], open: "edge", thin: 0 },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner", centered: 0, tight:0, thin: 0 },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", centered: 0.5, tight:0, thin: 0 },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", centered: 0.5, tight:0.5, thin: 0 },
+  6: { cols: 9, rows: 10, stamps: ["45", "51", "24"], open: "inner", centered: 0.3, tight:0.7, thin: .5 },
 };
 
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
   const scripted = Planner.INTRO[w];
   if (scripted) {
-    return [{ plan: Plan.copy({ wave: w, rows: scripted.rows, cols: scripted.cols, stamps: scripted.stamps, open: scripted.open, thin: scripted.thin, fuelChance: 0, overlap: 0, stronger: 0 }), locked: false }];
+    return [{
+      plan: Plan.copy({
+        wave: w,
+        fuelChance: 0,
+        overlap: 0,
+        stronger: 0,
+        area: 1,        
+        ...scripted
+      }),
+      locked: false
+    }];
   }
   let base = 4;
   let hold = 3;
   let at = 6;
-  while (w >= at + hold && base < 9) {
+  while (w >= at + hold && base < 7) {
     at += hold;
     base++;
     hold = base - 1;
@@ -80,7 +91,7 @@ Planner.offer = function (wave) {
   }
   let overlap = 0;
   let stronger = 0;
-  if (Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
+  if ( w >= EXTRAS_UNLOCK.strength.minlevel && Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
     overlap = .2*Math.random()*.6;
     stronger = overlap + (1-overlap)*Math.random();
   }
