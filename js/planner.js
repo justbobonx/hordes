@@ -40,7 +40,6 @@ Planner.offer = function (wave) {
   // 18-23 | 7 | 5–7 |
   // 24-30 | 8 | 5–8 |
   // 31+   | 9 | 5–9 |
-
   let base = 4;
   let hold = 3;
   let at = 6;
@@ -68,6 +67,14 @@ Planner.offer = function (wave) {
   }
   const stamps = [];
   for (let n = 0; n < count && pool.length; n++) stamps.push(pool[n]);
+
+  let fuelChance = 0;
+  if (w >= EXTRAS_UNLOCK.fuel.minlevel && Math.random() < EXTRAS_UNLOCK.fuel.onPlan) {
+    const lo = EXTRAS_UNLOCK.fuel.range[0];
+    const hi = EXTRAS_UNLOCK.fuel.range[1];
+    fuelChance = lo + Math.random() * (hi - lo);
+  }
+
   let cells = 0;
   let maxW = 1;
   let maxH = 1;
@@ -76,6 +83,12 @@ Planner.offer = function (wave) {
     cells += piece.w * piece.h;
     if (piece.w > maxW) maxW = piece.w;
     if (piece.h > maxH) maxH = piece.h;
+  }
+  if (fuelChance > 0 && stamps.length > 0) {
+    const expectedExtras = fuelChance / (1 - fuelChance);
+    cells += stamps.length * expectedExtras * 9;
+    if (3 > maxW) maxW = 3;
+    if (3 > maxH) maxH = 3;
   }
   const mult = 1.5 + Math.random() * 0.5;
   let area = cells * mult;
@@ -92,12 +105,6 @@ Planner.offer = function (wave) {
     cols++;
     rows = cols + delta;
     if (rows < minR) rows = minR;
-  }
-  let fuelChance = 0;
-  if (w >= EXTRAS_UNLOCK.fuel.minlevel && Math.random() < EXTRAS_UNLOCK.fuel.onPlan) {
-    const lo = EXTRAS_UNLOCK.fuel.range[0];
-    const hi = EXTRAS_UNLOCK.fuel.range[1];
-    fuelChance = lo + Math.random() * (hi - lo);
   }
   let overlap = 0;
   let stronger = 0;
