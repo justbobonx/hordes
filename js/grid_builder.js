@@ -118,13 +118,14 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     const left = stamps.length - i;
     const canNew = left >= deficit + MIN_BLOB_SIZE;
     const wantNew = i > 0 && canNew && Math.random() < 0.5;
-    const placed = GridBuilder.dropStamp(grid, stamps[i], nextId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
+    const stampId = nextId;
+    const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
     if (placed.fp) { placed.fp.boardId = pieces.length; pieces.push(placed.fp); }
     if (placed.spawned) nextBlob++;
     nextId++;
     // fuel chain after this stamp
-    let lastId = i;
+    let lastId = stampId;
     let lastAnchor = { r: placed.row, c: placed.col };
     let lastSole = [];
     for (let r = 0; r < rows; r++) {
@@ -857,6 +858,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 
