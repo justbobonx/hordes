@@ -41,8 +41,12 @@ Game.prototype.layoutTray = function () {
   let unitsW = 0;
   let maxH = 0;
   const shapes = [];
+  const kinds = [];
   for (let i = 0; i < list.length; i++) {
-    const s = Grid.STAMP_DEFINITIONS[list[i]] || { w: 1, h: 1 };
+    const fp = this.pieceById(list[i]);
+    const kind = fp ? fp.kind : "33";
+    kinds.push(kind);
+    const s = Grid.STAMP_DEFINITIONS[kind] || { w: 1, h: 1 };
     shapes.push(s);
     unitsW += s.w;
     if (s.h > maxH) maxH = s.h;
@@ -60,7 +64,7 @@ Game.prototype.layoutTray = function () {
     const sw = s.w * cell;
     const sh = s.h * cell;
     const y = (h - sh) / 2;
-    stamps.push({ index: i, kind: list[i], x: x, y: y, w: sw, h: sh, cell: cell });
+    stamps.push({ index: i, kind: kinds[i], x: x, y: y, w: sw, h: sh, cell: cell });
     x += sw + 6;
   }
   this.tray = { h: h, cell: cell, stamps: stamps };
@@ -77,9 +81,11 @@ Game.prototype.hitTray = function (x, y) {
 
 Game.prototype.pointOnPreview = function (x, y) {
   if (!this.preview || !this.grid) return false;
-  const kind = this.queue[this.preview.qIndex];
-  if (!kind) return false;
-  const cells = Grid.footprint(this.grid.rows, this.grid.cols, kind, this.preview.row, this.preview.col);
+  const fp = this.pieceById(this.queue[this.preview.qIndex]);
+  if (!fp) return false;
+  const aimed = Footprint.fromStamp(this.grid.rows, this.grid.cols, fp.kind, this.preview.row, this.preview.col);
+  if (!aimed) return false;
+  const cells = aimed.cells;
   const o = this.origin;
   for (let i = 0; i < cells.length; i++) {
     const cx = o.x + cells[i].c * o.cell;
@@ -143,7 +149,6 @@ Game.prototype.loop = function () {
   requestAnimationFrame(tick);
 };
 
-
 Game.prototype.drawBoard = function (ctx) {
   const o = this.origin;
   const rows = this.grid.rows;
@@ -171,11 +176,11 @@ Game.prototype.drawBoard = function (ctx) {
     }
   }
   if (!this.preview || !this.queue.length || (this.waiting() && !this.hintLock)) return;
-  const kind = this.queue[this.preview.qIndex];
-  if (!kind) return;
-  const raw = Grid.footprint(rows, cols, kind, this.preview.row, this.preview.col);
-  if (!raw.length) return;
-  // Seeds for primary (same logic as beginDrop)
+  const fp = this.pieceById(this.queue[this.preview.qIndex]);
+  if (!fp) return;
+  const aimed = Footprint.fromStamp(rows, cols, fp.kind, this.preview.row, this.preview.col);
+  if (!aimed || !aimed.cells.length) return;
+  const raw = aimed.cells;
   const have = {};
   for (let i = 0; i < raw.length; i++) have[raw[i].r + "," + raw[i].c] = true;
   const row = this.preview.row;
@@ -202,10 +207,10 @@ Game.prototype.drawBoard = function (ctx) {
     const y = o.y + primary[i].r * o.cell;
     ctx.strokeRect(x + inset, y + inset, o.cell - inset * 2, o.cell - inset * 2);
   }
-  // Orange: fuel secondaries (including the fuel cell itself), smaller box
   const orangeInset = Math.max(6, o.cell * 0.18);
   const fuelSeen = {};
   const queue = [];
+  // Origin for the first fuel is the aimed stamp's anchor, same as the builder.
   for (let i = 0; i < primary.length; i++) {
     const cell = this.grid.at(primary[i].r, primary[i].c);
     if (cell && cell.is("fuel")) queue.push({ fuel: primary[i], prevR: row, prevC: col });
@@ -218,30 +223,9 @@ Game.prototype.drawBoard = function (ctx) {
     const fk = fuel.r + "," + fuel.c;
     if (fuelSeen[fk]) continue;
     fuelSeen[fk] = true;
-    // Build offset 3x3 exactly as onCellLand (chain from prev anchor)
-    let extra = [];
-    let fseeds = [];
-    if (prevR != null && prevC != null) {
-      const cells = Grid.fuelFootprint(rows, cols, fuel.r, fuel.c, prevR, prevC);
-      for (let i = 0; i < cells.length; i++) {
-        if (cells[i].r === fuel.r && cells[i].c === fuel.c) continue;
-        extra.push(cells[i]);
-        fseeds.push(cells[i]);
-      }
-    } else {
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const rr = fuel.r + dr;
-          const cc = fuel.c + dc;
-          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-          extra.push({ r: rr, c: cc });
-          fseeds.push({ r: rr, c: cc });
-        }
-      }
-    }
+    const extra = this.fuelCellsFrom(fuel.r, fuel.c, prevR, prevC);
+    const fseeds = extra.slice();
     const secondary = this.reachable(extra, fseeds, prevR, prevC);
-    // Include the fuel cell itself in the orange set
     const orange = [{ r: fuel.r, c: fuel.c }].concat(secondary);
     const oseen = {};
     for (let i = 0; i < orange.length; i++) {
@@ -252,9 +236,9 @@ Game.prototype.drawBoard = function (ctx) {
       const y = o.y + orange[i].r * o.cell;
       ctx.strokeStyle = "#EBB447";
       ctx.strokeRect(x + orangeInset, y + orangeInset, o.cell - orangeInset * 2, o.cell - orangeInset * 2);
-      // Chain: any new fuel in this secondary uses this fuel as its prev
       const ncell = this.grid.at(orange[i].r, orange[i].c);
       if (ncell && ncell.is("fuel") && !fuelSeen[ok]) {
+        // Next fuel orients off this fuel cell, same as the builder chain.
         queue.push({ fuel: orange[i], prevR: fuel.r, prevC: fuel.c });
       }
     }
@@ -263,7 +247,6 @@ Game.prototype.drawBoard = function (ctx) {
   const ax = o.x + (this.preview.col + 0.5) * o.cell;
   const ay = o.y + (this.preview.row + 0.5) * o.cell;
   const m = o.cell * 0.16;
-  // Black half-alpha box twice the yellow size, over the stamp hilite, under the yellow.
   ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
   const bm = m * 2;
   ctx.fillRect(ax - bm / 2, ay - bm / 2, bm, bm);

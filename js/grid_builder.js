@@ -45,7 +45,7 @@ GridBuilder.build = function (plan) {
     GridBuilder.paintCities(built.grid, stamps.length);
     GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
     GridBuilder.promote(built.grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
-    built.grid.anchors = built.anchors || [];
+    built.grid.pieces = built.pieces || [];
     built.grid.dress();
     return built.grid;
   }
@@ -58,14 +58,18 @@ GridBuilder.build = function (plan) {
     let midC = (cols / 2) | 0;
     if (shape && !(shape.h & 1)) midR = Math.min(rows - 1.5, Math.max(0.5, midR - 0.5));
     if (shape && !(shape.w & 1)) midC = Math.min(cols - 1.5, Math.max(0.5, midC - 0.5));
-    const seed = Grid.footprint(rows, cols, kind, midR, midC);
-    for (let i = 0; i < seed.length; i++) grid.at(seed[i].r, seed[i].c).setType("horde");
-    grid.anchors = [{ row: midR, col: midC }];
+    const fp = Footprint.fromStamp(rows, cols, kind, midR, midC);
+    grid.pieces = [];
+    if (fp) {
+      for (let i = 0; i < fp.cells.length; i++) grid.at(fp.cells[i].r, fp.cells[i].c).setType("horde");
+      fp.boardId = 0;
+      grid.pieces.push(fp);
+    }
   } else {
     GridBuilder.paintCities(grid, stamps.length);
     GridBuilder.thin(grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
     GridBuilder.promote(grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
-    grid.anchors = built.anchors || [];
+    grid.pieces = built.pieces || [];
   }
   if (!built) GridBuilder.paintCities(grid, stamps.length);
   grid.dress();
@@ -98,7 +102,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
   const uniqueMin = [];
   const strongCount = [];
   const blobSize = [];
-  const anchors = [];
+  const pieces = [];
   let nextBlob = 0;
   let nextId = 0;
   for (let i = 0; i < stamps.length; i++) {
@@ -116,7 +120,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     const wantNew = i > 0 && canNew && Math.random() < 0.5;
     const placed = GridBuilder.dropStamp(grid, stamps[i], nextId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
-    anchors.push({ row: placed.row, col: placed.col });
+    if (placed.fp) { placed.fp.boardId = pieces.length; pieces.push(placed.fp); }
     if (placed.spawned) nextBlob++;
     nextId++;
     // fuel chain after this stamp
@@ -131,6 +135,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     while (fuelChance > 0 && Math.random() < fuelChance && lastSole.length) {
       const fuel = GridBuilder.tryPlaceFuel(grid, lastId, lastSole, lastAnchor, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols);
       if (!fuel) break;
+      if (fuel.fp) { fuel.fp.boardId = pieces.length; pieces.push(fuel.fp); }
       lastId = fuel.id;
       lastAnchor = fuel.anchor;
       lastSole = fuel.soleCells;
@@ -138,7 +143,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
       nextId++;
     }
   }
-  return { grid: grid, blobAt: blobAt, anchors: anchors, cover: cover, sole: sole, own: own, uniqueMin: uniqueMin, strongCount: strongCount, stampsOn: stampsOn };
+  return { grid: grid, blobAt: blobAt, pieces: pieces, cover: cover, sole: sole, own: own, uniqueMin: uniqueMin, strongCount: strongCount, stampsOn: stampsOn };
 };
 
 GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
@@ -333,8 +338,9 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   }
 
   function consider(row, col) {
-    const cells = Grid.footprint(rows, cols, kind, row, col);
-    if (!cells.length || !full) return;
+    const fp = Footprint.fromStamp(rows, cols, kind, row, col);
+    if (!fp || !fp.cells.length || !full) return;
+    const cells = fp.cells;
     let fresh = 0;
     let freshR = 0;
     let freshC = 0;
@@ -510,7 +516,9 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   }
   const committed = GridBuilder.commitPiece(grid, pick.cells, id, uniqueMinVal, strongN, pick.join, pick.hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, null);
   if (!committed || own[id] < (pick.need || 0)) return null;
-  return { spawned: committed.spawned, row: pick.row, col: pick.col };
+  const fp = Footprint.fromStamp(rows, cols, kind, pick.row, pick.col);
+  if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need || uniqueMinVal; fp.strongN = strongN; }
+  return { spawned: committed.spawned, row: pick.row, col: pick.col, fp: fp };
 };
 
 GridBuilder.paintCities = function (grid, np) {
@@ -683,7 +691,9 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
   for (let ci = 0; ci < order.length; ci++) {
     const fuelCell = order[ci];
     if (cover[fuelCell.r][fuelCell.c] !== 1 || sole[fuelCell.r][fuelCell.c] !== prevId) continue;
-    const cells = Grid.fuelFootprint(rows, cols, fuelCell.r, fuelCell.c, prevAnchor.r, prevAnchor.c);
+    const fp = Footprint.fromFuel(rows, cols, fuelCell.r, fuelCell.c, prevAnchor.r, prevAnchor.c);
+    if (!fp) continue;
+    const cells = fp.cells;
     const check = GridBuilder.legalFootprint(cells, nextId, uniqueMinVal, overlap, cover, sole, own, uniqueMin);
     if (!check) continue;
 
@@ -739,7 +749,9 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
 
   const committed = GridBuilder.commitPiece(grid, pick.cells, nextId, uniqueMinVal, strongN, pick.join, pick.hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, pick.fuelCell);
   if (!committed || own[nextId] < (pick.need || 0)) return null;
-  return { id: nextId, soleCells: committed.soleCells, spawned: committed.spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c } };
+  const fp = Footprint.fromFuel(rows, cols, pick.fuelCell.r, pick.fuelCell.c, prevAnchor.r, prevAnchor.c);
+  if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need || uniqueMinVal; fp.strongN = strongN; }
+  return { id: nextId, soleCells: committed.soleCells, spawned: committed.spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c }, fp: fp };
 };
 
 
@@ -845,6 +857,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 

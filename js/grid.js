@@ -1,10 +1,10 @@
-/** Live board. Footprint, apply, dump / load. No generate. */
+/** Live board. Apply, dump / load. Footprints live in pieces. */
 
 function Grid(rows, cols) {
   this.rows = rows | 0;
   this.cols = cols | 0 || this.rows;
   this.cells = [];
-  this.anchors = [];
+  this.pieces = [];
   for (let r = 0; r < this.rows; r++) {
     const row = [];
     for (let c = 0; c < this.cols; c++) row.push(new Cell("grass"));
@@ -12,93 +12,17 @@ function Grid(rows, cols) {
   }
 }
 
-//15  24  34  33  22
-Grid.STAMP_DEFINITIONS = {  
-  "33": { w: 3, h: 3, p: 2, minlevel: 1 },  // 9
-  "35": { w: 3, h: 5, p: 3, minlevel: 4 },  // 15
-  "53": { w: 5, h: 3, p: 3, minlevel: 4 },  // 15
-  "24": { w: 2, h: 4, p: 3, minlevel: 5 },  // 8
-  "42": { w: 4, h: 2, p: 3, minlevel: 5 },  // 8
-  "45": { w: 4, h: 5, p: 2, minlevel: 7 },  // 20
-  "54": { w: 5, h: 4, p: 2, minlevel: 7 },  // 20
-  "15": { w: 1, h: 5, p: 1, minlevel: 8 },  // 5
-  "51": { w: 5, h: 1, p: 1, minlevel: 8 },  // 5
-  "22": { w: 2, h: 2, p: 1, minlevel: 8 },  // 4
-};
-
-Grid.footprint = function (rows, cols, kind, row, col) {
-  const out = [];
-  const shape = Grid.STAMP_DEFINITIONS[kind];
-  if (!shape) return out;
-  if (shape.w & 1) {
-    if (col < 0 || col >= cols) return out;
-  } else if (col < 0.5 || col > cols - 1.5) return out;
-  if (shape.h & 1) {
-    if (row < 0 || row >= rows) return out;
-  } else if (row < 0.5 || row > rows - 1.5) return out;
-  const r0 = Math.round(row - (shape.h - 1) / 2);
-  const c0 = Math.round(col - (shape.w - 1) / 2);
-  for (let dr = 0; dr < shape.h; dr++) {
-    for (let dc = 0; dc < shape.w; dc++) {
-      const rr = r0 + dr;
-      const cc = c0 + dc;
-      if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-      out.push({ r: rr, c: cc });
-    }
-  }
-  return out;
-};
-
-// 3x3 fuel stamp shifted so the fuel cell sits on the back edge of the
-// vector from (anchorR, anchorC) to (fuelR, fuelC). Returns the cells
-// (including the fuel) or [] if no usable direction.
-// If anchor is exactly on the fuel cell, returns the centered 3x3.
-Grid.fuelFootprint = function (rows, cols, fuelR, fuelC, anchorR, anchorC) {
-  const dr = fuelR - anchorR;
-  const dc = fuelC - anchorC;
-  if (dr === 0 && dc === 0) {
-    // Anchor directly on fuel: centered 3x3
-    const out = [];
-    for (let ddr = -1; ddr <= 1; ddr++) {
-      for (let ddc = -1; ddc <= 1; ddc++) {
-        const rr = fuelR + ddr;
-        const cc = fuelC + ddc;
-        if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-        out.push({ r: rr, c: cc });
-      }
-    }
-    return out;
-  }
-  const DIRS8 = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1]
-  ];
-  let bestDir = 0;
-  let bestDot = -Infinity;
-  const len = Math.sqrt(dr * dr + dc * dc);
-  for (let d = 0; d < DIRS8.length; d++) {
-    const dlen = Math.sqrt(DIRS8[d][0] * DIRS8[d][0] + DIRS8[d][1] * DIRS8[d][1]);
-    const dot = (dr * DIRS8[d][0] + dc * DIRS8[d][1]) / (len * dlen);
-    if (dot > bestDot) {
-      bestDot = dot;
-      bestDir = d;
-    }
-  }
-  const outDir = DIRS8[bestDir];
-  const rel = [-outDir[0], -outDir[1]];
-  const centerR = fuelR - rel[0];
-  const centerC = fuelC - rel[1];
-  const out = [];
-  for (let ddr = -1; ddr <= 1; ddr++) {
-    for (let ddc = -1; ddc <= 1; ddc++) {
-      const rr = Math.round(centerR + ddr);
-      const cc = Math.round(centerC + ddc);
-      if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
-      out.push({ r: rr, c: cc });
-    }
-  }
-  return out;
+Grid.STAMP_DEFINITIONS = {
+  "33": { w: 3, h: 3, p: 2, minlevel: 1 },
+  "35": { w: 3, h: 5, p: 3, minlevel: 4 },
+  "53": { w: 5, h: 3, p: 3, minlevel: 4 },
+  "24": { w: 2, h: 4, p: 3, minlevel: 5 },
+  "42": { w: 4, h: 2, p: 3, minlevel: 5 },
+  "45": { w: 4, h: 5, p: 2, minlevel: 7 },
+  "54": { w: 5, h: 4, p: 2, minlevel: 7 },
+  "15": { w: 1, h: 5, p: 1, minlevel: 8 },
+  "51": { w: 5, h: 1, p: 1, minlevel: 8 },
+  "22": { w: 2, h: 2, p: 1, minlevel: 8 }
 };
 
 Grid.prototype.at = function (r, c) {
@@ -235,7 +159,9 @@ Grid.prototype.writeStrengths = function (rows) {
 };
 
 Grid.prototype.dump = function () {
-  return { rows: this.rows, cols: this.cols, cells: this.types(), strengths: this.strengths(), anchors: this.anchors || [] };
+  const pieces = [];
+  for (let i = 0; i < this.pieces.length; i++) pieces.push(this.pieces[i].toJSON());
+  return { rows: this.rows, cols: this.cols, cells: this.types(), strengths: this.strengths(), pieces: pieces };
 };
 
 Grid.load = function (data) {
@@ -246,7 +172,13 @@ Grid.load = function (data) {
   const grid = new Grid(rows, cols);
   grid.writeTypes(data.cells);
   if (data.strengths) grid.writeStrengths(data.strengths);
-  grid.anchors = Array.isArray(data.anchors) ? data.anchors : [];
+  grid.pieces = [];
+  if (Array.isArray(data.pieces)) {
+    for (let i = 0; i < data.pieces.length; i++) {
+      const fp = Footprint.fromJSON(data.pieces[i]);
+      if (fp) grid.pieces.push(fp);
+    }
+  }
   grid.dress();
   return grid;
 };

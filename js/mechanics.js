@@ -1,9 +1,5 @@
 /** Propagation, action queue, fuel chains. Mutates grid + actions only. */
 
-// Compute cells reachable from seeds inside candidateCells.
-// Barriers are included (destroyed) but do not spread.
-// Diagonal steps are blocked if either ortho is a barrier.
-// Returns array of {r,c}. Boom step never sees barriers.
 Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol) {
   if (!candidateCells || !candidateCells.length || !seeds || !seeds.length) return [];
   const have = {};
@@ -11,11 +7,9 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
     const k = candidateCells[i].r + "," + candidateCells[i].c;
     have[k] = true;
   }
-
-  // Shadow: seed with barrier's in-cone neighbors, then flow outward inside the 45° cone.
   const shadowed = {};
   if (anchorRow != null && anchorCol != null) {
-    const dirs8 = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+    const dirs8 = Footprint.DIRS8;
     for (let i = 0; i < candidateCells.length; i++) {
       const br = candidateCells[i].r;
       const bc = candidateCells[i].c;
@@ -31,11 +25,10 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
         const parallel = adr * ddr + adc * ddc;
         if (parallel <= 0) return false;
         const cross = adr * ddc - adc * ddr;
-        return Math.abs(cross) <= parallel; // angle <= 45°
+        return Math.abs(cross) <= parallel;
       }
       const q = [];
       const seen = {};
-      // pass 1: immediate neighbors in the cone
       for (let d = 0; d < dirs8.length; d++) {
         const rr = br + dirs8[d][0];
         const cc = bc + dirs8[d][1];
@@ -45,7 +38,6 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
         shadowed[nk] = true;
         q.push({ r: rr, c: cc, par: adr * (rr - br) + adc * (cc - bc) });
       }
-      // later passes: flow to cells with strictly greater parallel, still in cone
       while (q.length) {
         const cur = q.shift();
         for (let d = 0; d < dirs8.length; d++) {
@@ -54,7 +46,7 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
           const nk = rr + "," + cc;
           if (seen[nk] || !have[nk] || !inCone(rr, cc)) continue;
           const par = adr * (rr - br) + adc * (cc - bc);
-          if (par <= cur.par) continue; // must move further along away axis
+          if (par <= cur.par) continue;
           seen[nk] = true;
           shadowed[nk] = true;
           q.push({ r: rr, c: cc, par: par });
@@ -62,7 +54,6 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
       }
     }
   }
-
   const landed = {};
   const result = [];
   const frontier = [];
@@ -73,11 +64,7 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
     seenSeed[k] = true;
     frontier.push({ r: seeds[i].r, c: seeds[i].c });
   }
-  const allDirs = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1],
-  ];
+  const allDirs = Footprint.DIRS8;
   while (frontier.length) {
     const next = [];
     const nextSeen = {};
@@ -88,7 +75,7 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
       landed[key] = true;
       result.push({ r: hit.r, c: hit.c });
       const hitCell = this.grid.at(hit.r, hit.c);
-      if (hitCell && hitCell.is("barrier")) continue; // land + destroy, do not spread
+      if (hitCell && hitCell.is("barrier")) continue;
       for (let d = 0; d < allDirs.length; d++) {
         const dr = allDirs[d][0];
         const dc = allDirs[d][1];
@@ -106,7 +93,6 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
   return result;
 };
 
-// cells and seeds are { r, c, from? }. Seeds must sit in cells. from null means launch all dirs (anchor). Later effects call this from onCellLand.
 Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol) {
   if (!cells || !cells.length || !seeds || !seeds.length) return null;
   const have = {};
@@ -136,30 +122,23 @@ Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol)
   return action;
 };
 
-// Return { stop: true } to keep the wave from leaving this cell.
-// Set action.stopped to halt the wave after this generation.
-// enqueueProp from here to start another prop. The wait stays up until those drain.
+// Live fuel expansion from a given origin anchor (the piece currently exploding).
+// Same call the builder uses: fromFuel(fuel, origin).
+Game.prototype.fuelCellsFrom = function (fuelR, fuelC, originR, originC) {
+  if (originR == null || originC == null) return [];
+  const fp = Footprint.fromFuel(this.grid.rows, this.grid.cols, fuelR, fuelC, originR, originC);
+  if (!fp) return [];
+  const out = [];
+  for (let i = 0; i < fp.cells.length; i++) {
+    if (fp.cells[i].r === fuelR && fp.cells[i].c === fuelC) continue;
+    out.push(fp.cells[i]);
+  }
+  return out;
+};
+
 Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   if (wasFuel) {
-    let extra = [];
-    if (action.anchorRow != null && action.anchorCol != null) {
-      const cells = Grid.fuelFootprint(this.grid.rows, this.grid.cols, r, c, action.anchorRow, action.anchorCol);
-      for (let i = 0; i < cells.length; i++) {
-        if (cells[i].r === r && cells[i].c === c) continue;
-        extra.push(cells[i]);
-      }
-    } else {
-      // no anchor: full centered 3x3
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const rr = r + dr;
-          const cc = c + dc;
-          if (rr < 0 || cc < 0 || rr >= this.grid.rows || cc >= this.grid.cols) continue;
-          extra.push({ r: rr, c: cc });
-        }
-      }
-    }
+    const extra = this.fuelCellsFrom(r, c, action.anchorRow, action.anchorCol);
     if (extra.length) {
       const candidates = extra.slice();
       candidates.push({ r: r, c: c });
@@ -174,7 +153,7 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
         action.cells.push(cell);
       }
     }
-    // Advance the chain anchor so any later fuel in this wave orients off this fuel.
+    // Next fuel in this wave orients off this fuel, same as the builder chain.
     action.anchorRow = r;
     action.anchorCol = c;
   }
@@ -202,8 +181,6 @@ Game.prototype.stepActions = function () {
   else this.settleStamp();
 };
 
-// Shared land path for both animated step and flush.
-// Returns the onCellLand result (or null).
 Game.prototype.landCell = function (action, hit) {
   const key = hit.r + "," + hit.c;
   if (action.landed[key]) return null;
@@ -233,11 +210,7 @@ Game.prototype.stepWave = function (action) {
   }
   const next = [];
   const nextSeen = {};
-  const allDirs = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1],           [0, 1],
-    [1, -1],  [1, 0],  [1, 1],
-  ];
+  const allDirs = Footprint.DIRS8;
   for (let i = 0; i < spreaders.length; i++) {
     const hit = spreaders[i];
     for (let d = 0; d < allDirs.length; d++) {
@@ -260,13 +233,13 @@ Game.prototype.settleStamp = function () {
   if (this.stampHeld) {
     const i = this.stampHeldIndex | 0;
     if (i >= 0 && i < this.queue.length) {
+      const boardId = this.queue[i];
       this.queue.splice(i, 1);
-      this.remAnchors.splice(i, 1);
+      if (this.used.indexOf(boardId) < 0) this.used.push(boardId);
     }
     this.stampHeld = false;
     this.stampHeldIndex = 0;
   }
-  // Reset highlight to default next piece (rightmost / index 0)
   this.selectedQ = this.queue.length ? 0 : null;
   this.preview = null;
   this.persist();
@@ -291,13 +264,13 @@ Game.prototype.flushActions = function () {
   if (this.stampHeld) {
     const i = this.stampHeldIndex | 0;
     if (i >= 0 && i < this.queue.length) {
+      const boardId = this.queue[i];
       this.queue.splice(i, 1);
-      this.remAnchors.splice(i, 1);
+      if (this.used.indexOf(boardId) < 0) this.used.push(boardId);
     }
     this.stampHeld = false;
     this.stampHeldIndex = 0;
   }
-  // Reset highlight to default next piece (rightmost / index 0)
   this.selectedQ = this.queue.length ? 0 : null;
   this.preview = null;
   if (this.grid && !this.queue.length) this.finish();
