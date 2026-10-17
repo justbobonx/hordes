@@ -694,7 +694,15 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
     if (cover[fuelCell.r][fuelCell.c] !== 1 || sole[fuelCell.r][fuelCell.c] !== prevId) continue;
     const fp = Footprint.fromFuel(rows, cols, fuelCell.r, fuelCell.c, prevAnchor.r, prevAnchor.c);
     if (!fp) continue;
-    const cells = fp.cells;
+    // Drop cells already belonging to the previous piece so the fuel only accounts for what it adds.
+    const cells = [];
+    for (let i = 0; i < fp.cells.length; i++) {
+      const r = fp.cells[i].r;
+      const c = fp.cells[i].c;
+      const onPrev = stampsOn[r] && stampsOn[r][c] && stampsOn[r][c].indexOf(prevId) >= 0;
+      if (!onPrev) cells.push(fp.cells[i]);
+    }
+    if (!cells.length) continue;
     const check = GridBuilder.legalFootprint(cells, nextId, uniqueMinVal, overlap, cover, sole, own, uniqueMin);
     if (!check) continue;
 
@@ -750,6 +758,9 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
 
   const committed = GridBuilder.commitPiece(grid, pick.cells, nextId, uniqueMinVal, strongN, pick.join, pick.hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, pick.fuelCell);
   if (!committed || own[nextId] < (pick.need || 0)) return null;
+  // Fuel cell itself stays on the previous piece for coverage but must be marked fuel.
+  const fuelCell = grid.at(pick.fuelCell.r, pick.fuelCell.c);
+  if (fuelCell) fuelCell.setType("fuel");
   const fp = Footprint.fromFuel(rows, cols, pick.fuelCell.r, pick.fuelCell.c, prevAnchor.r, prevAnchor.c);
   if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need || uniqueMinVal; fp.strongN = strongN; }
   return { id: nextId, soleCells: committed.soleCells, spawned: committed.spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c }, fp: fp };

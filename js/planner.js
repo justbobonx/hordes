@@ -3,7 +3,7 @@
 function Planner() {}
 
 const EXTRAS_UNLOCK = {
-  fuel: { minlevel: 10, onPlan: 0.6, range: [0.2, 0.5] },
+  fuel: { minlevel: 10, onPlan: 0.6, range: [0.2, 0.6] },
   strength: { minlevel: 10, onPlan: 0.6 },
   // barrier
 };

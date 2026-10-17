@@ -140,13 +140,8 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   if (wasFuel) {
     const extra = this.fuelCellsFrom(r, c, action.anchorRow, action.anchorCol);
     if (extra.length) {
-      const candidates = extra.slice();
-      candidates.push({ r: r, c: c });
-      const fuelSeed = [{ r: r, c: c }];
-      const pruned = this.reachable(candidates, fuelSeed, r, c);
-      for (let i = 0; i < pruned.length; i++) {
-        const cell = pruned[i];
-        if (cell.r === r && cell.c === c) continue;
+      for (let i = 0; i < extra.length; i++) {
+        const cell = extra[i];
         const key = cell.r + "," + cell.c;
         if (action.have[key]) continue;
         action.have[key] = cell;
