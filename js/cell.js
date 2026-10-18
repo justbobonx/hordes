@@ -239,10 +239,14 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
 
   // Strength number for multi-hit horde
   if (this.type === "horde" && this.strength > 1) {
-    ctx.fillStyle = "#e5ce7a";
-    ctx.font = size + "px m5x7, monospace";
+    const offset= size * 0.05;
+    ctx.font = size*1.2 + "px m5x7, monospace";    
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(String(this.strength), x + size / 2, y + size / 2 + 1);
+    ctx.fillStyle = "#442222";
+    ctx.fillText(String(this.strength), x + size / 2 + offset*1.5, y + size / 2 );
+    ctx.fillStyle = "#e5ce7a";
+    ctx.fillText(String(this.strength), x + size / 2 + offset/2, y + size / 2 - offset );
+    
   }
 };
