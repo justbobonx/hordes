@@ -7,7 +7,8 @@ const USE_SPRITES = false;
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
-  city: { fill: "#2a7ecf", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#6aafeb" },
+  city: { fill: "#1665d3", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#92adc3" },
+  //city: { fill: "#677592", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#41b441" },
   horde: { fill: "#c4392f", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.15 },
   cleared: { fill: "#3f6242", mark: "#b8352c", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   cleared_hint: { fill: "#3f6242", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
@@ -148,10 +149,8 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.fillRect(ix, iy, is, is);
   }
 
-  // Outline: different color, width scales with size, max 2px.
-  // Groups stroke only outer edges (shared edges stay clean), same idea as corner rounding.
   if (look.outline && ctx.roundRect) {
-    const lw = Math.min(4, Math.max(2, size * 0.1));
+    const lw = Math.min(4, Math.max(2, size * 0.11));
     const outer = this.outer || [true, true, true, true];
     const r = corners;
     ctx.strokeStyle = look.outline;
