@@ -305,9 +305,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   const uniqueMinVal = full - ss;
   const ov = overlap || 0;
   const overlapMin = uniqueMinVal * (1 - ov);
-  let strongN = Math.max(0, uniqueMinVal - overlapMin);
-  const noise = (Math.random() < 0.5 ? -1 : 1) * ((Math.random() * 2) | 0);
-  strongN = Math.max(0, Math.min(uniqueMinVal, strongN + noise));
+  let strongN = Math.max(0, uniqueMinVal - overlapMin); // exact floor: uniqueMin * overlap
   const rowAnchors = [];
   const colAnchors = [];
   if (shape && shape.h & 1) {
@@ -680,9 +678,7 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
   const uniqueMinVal = FUEL_FULL - FUEL_SS;
   const ov = overlap || 0;
   const overlapMin = uniqueMinVal * (1 - ov);
-  let strongN = Math.max(0, uniqueMinVal - overlapMin);
-  const noise = (Math.random() < 0.5 ? -1 : 1) * ((Math.random() * 2) | 0);
-  strongN = Math.max(0, Math.min(uniqueMinVal, strongN + noise));
+  let strongN = Math.max(0, uniqueMinVal - overlapMin); // exact floor: uniqueMin * overlap
 
   const order = candidates.slice();
   GridBuilder.shuffle(order);
@@ -768,13 +764,15 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
 
 
 GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
-  if (!stronger || stronger <= 0 || !stampsOn || !strongCount) return;
+  // stronger is relative excess above the overlap floor [0,1].
+  // strongCount holds the mandatory floors (uniqueMin * overlap per stamp).
+  // stronger=0 → only floors; stronger=1 → every overlap cell.
+  if (!stampsOn || !strongCount) return;
   const rows = grid.rows;
   const cols = grid.cols;
-  const deficit = strongCount.slice();
-  for (let i = 0; i < deficit.length; i++) {
-    if (!deficit[i]) deficit[i] = 0;
-  }
+  const floor = strongCount.slice();
+  for (let i = 0; i < floor.length; i++) if (!floor[i]) floor[i] = 0;
+
   const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
   function adjStrong(r, c) {
     let n = 0;
@@ -784,7 +782,7 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
     }
     return n;
   }
-  // Collect candidates
+
   const cands = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -794,69 +792,74 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
       cands.push({ r: r, c: c });
     }
   }
-  // Satisfy quotas first
-  let guard = cands.length * 2;
+  if (!cands.length) return;
+
+  function score(p) {
+    const ids = stampsOn[p.r][p.c] || [];
+    let w = 0.25;
+    for (let k = 0; k < ids.length; k++) {
+      if (floor[ids[k]] > 0) w += 5 + floor[ids[k]];
+    }
+    w += adjStrong(p.r, p.c) * 3;          // strong grouping
+    w *= 0.55 + Math.random() * 0.9;       // noise
+    return w;
+  }
+
+  // Pass 1: mandatory floors. Greedy best-score among cells that help a remaining floor.
+  let guard = cands.length * 4;
   while (guard-- > 0) {
     let any = false;
-    for (let i = 0; i < deficit.length; i++) if (deficit[i] > 0) any = true;
+    for (let i = 0; i < floor.length; i++) if (floor[i] > 0) any = true;
     if (!any) break;
-    let total = 0;
-    const weights = [];
+
+    let best = null;
+    let bestW = -1;
     for (let i = 0; i < cands.length; i++) {
       const p = cands[i];
-      if (grid.at(p.r, p.c).strength > 1) continue; // already promoted
+      if (grid.at(p.r, p.c).strength > 1) continue;
       const ids = stampsOn[p.r][p.c] || [];
-      let w = 0.1;
-      for (let k = 0; k < ids.length; k++) {
-        const sid = ids[k];
-        if (deficit[sid] > 0) w += 3 + deficit[sid];
-      }
-      w += adjStrong(p.r, p.c) * 1.5;
-      w *= 0.7 + Math.random() * 0.6;
-      weights.push(w);
-      total += w;
+      let helps = false;
+      for (let k = 0; k < ids.length; k++) if (floor[ids[k]] > 0) helps = true;
+      if (!helps) continue;
+      const w = score(p);
+      if (w > bestW) { bestW = w; best = p; }
     }
-    if (total <= 0) break;
-    let roll = Math.random() * total;
-    let pick = null;
-    for (let i = 0; i < cands.length; i++) {
-      if (grid.at(cands[i].r, cands[i].c).strength > 1) continue;
-      roll -= weights[i] || 0;
-      if (roll <= 0) { pick = cands[i]; break; }
-    }
-    if (!pick) break;
-    // compute strength
-    const ids = stampsOn[pick.r][pick.c] || [];
+    if (!best) break;
+
+    const ids = stampsOn[best.r][best.c] || [];
     let st = 0;
     for (let k = 0; k < ids.length; k++) {
       const sid = ids[k];
-      if (deficit[sid] > 0) {
+      if (floor[sid] > 0) {
         st++;
-        deficit[sid]--;
-      } else if (Math.random() < stronger) {
-        st++;
+        floor[sid]--;
       }
     }
     st = Math.max(1, st);
-    st = Math.min(st, cover[pick.r][pick.c]);
-    const cell = grid.at(pick.r, pick.c);
-    cell.strength = st;
+    st = Math.min(st, cover[best.r][best.c]);
+    grid.at(best.r, best.c).strength = st;
   }
-  // Optional extra promotions from remaining stronger budget (light)
-  if (stronger > 0.3) {
+
+  // Pass 2: excess density from relative stronger.
+  // Grouping boosts chance; stronger=1 forces every remaining cell.
+  if (stronger > 0) {
     for (let i = 0; i < cands.length; i++) {
       const p = cands[i];
       const cell = grid.at(p.r, p.c);
       if (cell.strength > 1) continue;
-      if (Math.random() < stronger * 0.4) {
-        const ids = stampsOn[p.r][p.c] || [];
-        let st = 0;
-        for (let k = 0; k < ids.length; k++) {
-          if (Math.random() < stronger) st++;
-        }
-        st = Math.max(1, Math.min(st, cover[p.r][p.c]));
-        if (st > 1) cell.strength = st;
+      const adj = adjStrong(p.r, p.c);
+      const group = 1 + adj * 0.55;
+      const noise = 0.65 + Math.random() * 0.7;
+      const chance = Math.min(1, stronger * group * noise);
+      if (Math.random() >= chance) continue;
+
+      const ids = stampsOn[p.r][p.c] || [];
+      let st = 0;
+      for (let k = 0; k < ids.length; k++) {
+        if (Math.random() < stronger) st++;
       }
+      st = Math.max(1, Math.min(st, cover[p.r][p.c]));
+      if (st > 1) cell.strength = st;
     }
   }
 };
@@ -869,6 +872,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 

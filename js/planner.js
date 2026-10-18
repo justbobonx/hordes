@@ -108,10 +108,14 @@ Planner.offer = function (wave) {
   }
   let overlap = 0;
   let stronger = 0;
+  // stronger is now the relative excess above the overlap floor (0 = floors only, 1 = all overlaps).
+  // overlap > 0 still produces a mandatory strong floor even when stronger = 0.
   if ( w >= EXTRAS_UNLOCK.strength.minlevel && Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
-    overlap = .2*Math.random()*.6;
-    stronger = overlap + (1-overlap)*Math.random();
+    overlap = Math.random();
+    stronger = Math.random();
   }
+  overlap = 1;
+  stronger = 1;
   return [{
     plan: Plan.copy({
       wave: w,
