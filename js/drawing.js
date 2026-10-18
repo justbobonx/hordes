@@ -99,7 +99,7 @@ Game.prototype.draw = function () {
   const ctx = this.ui.ctx;
   const w = window.innerWidth;
   const h = window.innerHeight;
-  ctx.fillStyle = "#171c14";
+  ctx.fillStyle = "#112211";
   ctx.fillRect(0, 0, w, h);
   this.layoutTray();
   this.drawTray(ctx);
@@ -154,7 +154,7 @@ Game.prototype.drawBoard = function (ctx) {
   const rows = this.grid.rows;
   const cols = this.grid.cols;
   const gap = Math.max(1, o.cell * 0.03);
-  ctx.fillStyle = "#10140e";
+  ctx.fillStyle = "#112211";
   ctx.fillRect(o.x - gap, o.y - gap, o.cell * cols + gap * 2, o.cell * rows + gap * 2);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
