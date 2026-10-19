@@ -61,6 +61,7 @@ Game.prototype.boot = function () {
     this.elapsedMs = run.elapsedMs | 0;
     this.resets = run.resets | 0;
     this.introDone = !!run.introDone;
+    this.activeHexKey = run.activeHexKey || null;
   }
   this.country = Save.readCountry();
   this.testPlan = Plan.fromQuery(location.search);
@@ -77,7 +78,13 @@ Game.prototype.boot = function () {
   this.sprites = SpriteBank.defaults(function () {});
   const board = Save.readBoard();
   if (this.country) {
-    this.setMode("map");
+    if (this.activeHexKey && board && board.cells) {
+      this.setMode("level");
+      this.restore(board);
+    } else {
+      this.setMode("level");
+      this.ui.showStart();
+    }
   } else {
     this.setMode("level");
     if (board && board.cells) this.restore(board);
@@ -86,9 +93,9 @@ Game.prototype.boot = function () {
   this.updateHud();
   this.updateMapHud();
   this.loop();
-  window.addEventListener("resize", function () {
-    self.layout();
-  });
+  window.addEventListener("resize", function () { self.onResize(); });
+  document.addEventListener("fullscreenchange", function () { self.onResize(); });
+  document.addEventListener("webkitfullscreenchange", function () { self.onResize(); });
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
       self.flushActions();
@@ -204,6 +211,10 @@ Game.prototype.startOver = function () {
 Game.prototype.onStart = function (help) {
   this.ui.hideStart();
   this.ui.hidePlan();
+  if (this.country) {
+    this.setMode("map");
+    return;
+  }
   if (help || !this.seen.start) {
     this.seen.start = true;
     this.persistRun();
@@ -266,6 +277,13 @@ Game.prototype.onPlan = function (card) {
 Game.prototype.beginWave = function (plan) {
   this.abortActions();
   this.plan = Plan.copy(plan);
+  if (this.plan.seed == null) {
+    this.plan.seed = (Math.random() * 0x100000000) >>> 0;
+    if (this.country && this.activeHexKey && this.country.hexes[this.activeHexKey]) {
+      this.country.hexes[this.activeHexKey].plan = Plan.copy(this.plan);
+      Save.writeCountry(this.country);
+    }
+  }
   this.grid = GridBuilder.build(this.plan);
   this.initial = this.grid.types();
   this.initialStrength = [];
@@ -848,6 +866,7 @@ Game.prototype.persistRun = function () {
     elapsedMs: elapsed,
     resets: this.resets | 0,
     introDone: !!this.introDone,
+    activeHexKey: this.activeHexKey || null,
   });
 };
 
@@ -929,10 +948,24 @@ Game.prototype.layoutMap = function () {
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   this.mapCanvas.style.width = w + "px";
   this.mapCanvas.style.height = h + "px";
+  this.mapCanvas.style.imageRendering = "pixelated";
   this.mapCanvas.width = Math.floor(w * dpr);
   this.mapCanvas.height = Math.floor(h * dpr);
   this.mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  this.mapLayout = MapDraw.layout(this.mapCanvas, this.country);
+  const topEl = document.getElementById("map-hud-top");
+  const botEl = document.getElementById("map-hud-bottom");
+  const top = topEl && !topEl.hidden ? topEl.getBoundingClientRect().height : 0;
+  const bot = botEl && !botEl.hidden ? botEl.getBoundingClientRect().height : 0;
+  this.mapLayout = MapDraw.layout(this.mapCanvas, this.country, { top: top, bot: bot });
+};
+
+Game.prototype.onResize = function () {
+  if (this.mode === "map") {
+    this.layoutMap();
+    this.drawMap();
+  } else {
+    this.layout();
+  }
 };
 
 Game.prototype.drawMap = function () {
@@ -994,7 +1027,16 @@ Game.prototype.onLevelExit = function (reason) {
     } else if (reason === "retry") {
       this.resetWave();
     } else {
-      this.giveUp();
+      // Intro quit: no overworld yet, return to title.
+      Save.clearBoard();
+      this.grid = null;
+      this.plan = null;
+      this.ended = null;
+      this.activeHexKey = null;
+      this.ui.hidePlan();
+      this.ui.hideStory();
+      this.ui.showStart();
+      this.updateHud();
     }
     return;
   }
@@ -1006,6 +1048,7 @@ Game.prototype.onLevelExit = function (reason) {
   if (reason === "lose") this.country.losses = (this.country.losses | 0) + 1;
   Overmap.tick(this.country);
   Save.writeCountry(this.country);
+  Save.clearBoard();
   this.layoutMap();
   this.drawMap();
   this.updateMapHud();
@@ -1024,6 +1067,7 @@ Game.prototype.onLevelExit = function (reason) {
     this.setMode("map");
   } else {
     this.activeHexKey = null;
+    this.persistRun();
     this.setMode("map");
   }
 };
@@ -1054,4 +1098,5 @@ Game.prototype.updateMapHud = function () {
   const elStatus = document.getElementById("map-status");
   if (elStatus) elStatus.textContent = this.country.status || "";
 };
+
 

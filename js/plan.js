@@ -76,6 +76,7 @@ Plan.copy = function (plan) {
     stronger: stronger,
   };
   if (area != null) out.area = area;
+  if (plan.seed != null) out.seed = plan.seed >>> 0;
   return out;
 };
 

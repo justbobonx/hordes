@@ -2,37 +2,47 @@
 
 function MapDraw() {}
 
-MapDraw.layout = function (canvas, country) {
+MapDraw.layout = function (canvas, country, insets) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.width / dpr;
   const h = canvas.height / dpr;
   const keys = Object.keys(country.hexes);
   if (!keys.length) return { size: 20, positions: {} };
+  const top = (insets && insets.top) || 0;
+  const bot = (insets && insets.bot) || 0;
+  const left = (insets && insets.left) || 0;
+  const right = (insets && insets.right) || 0;
 
-  let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+  let minUX = Infinity, maxUX = -Infinity, minUY = Infinity, maxUY = -Infinity;
   for (let i = 0; i < keys.length; i++) {
     const hex = country.hexes[keys[i]];
-    if (hex.q < minQ) minQ = hex.q;
-    if (hex.q > maxQ) maxQ = hex.q;
-    if (hex.r < minR) minR = hex.r;
-    if (hex.r > maxR) maxR = hex.r;
+    const ux = hex.q * 1.5;
+    const uy = (hex.r + hex.q / 2) * Math.sqrt(3);
+    if (ux < minUX) minUX = ux;
+    if (ux > maxUX) maxUX = ux;
+    if (uy < minUY) minUY = uy;
+    if (uy > maxUY) maxUY = uy;
   }
+  const deltaX = maxUX - minUX;
+  const deltaY = maxUY - minUY;
 
-  // Compute bounding box in axial flat-top space, then scale to fill screen with padding
-  const spanQ = maxQ - minQ + 1;
-  const spanR = maxR - minR + 1;
   const pad = 24;
-  const availW = Math.max(40, w - pad * 2);
-  const availH = Math.max(40, h - pad * 2);
-  // Flat-top: width ~ size * 1.5 * spanQ, height ~ size * √3 * spanR
-  const sizeByW = availW / (spanQ * 1.5 + 0.5);
-  const sizeByH = availH / (spanR * Math.sqrt(3) + 0.5);
-  const size = Math.max(14, Math.min(sizeByW, sizeByH, 42) * 0.92);
+  const availW = Math.max(40, w - left - right - pad * 2);
+  const availH = Math.max(40, h - top - bot - pad * 2);
+  const sizeByW = availW / (deltaX + 2);
+  const sizeByH = availH / (deltaY + Math.sqrt(3));
+  const size = Math.min(sizeByW, sizeByH);
 
-  const totalW = spanQ * size * 1.5;
-  const totalH = spanR * size * Math.sqrt(3);
-  const originX = (w - totalW) / 2 - minQ * size * 1.5 + size * 0.25;
-  const originY = (h - totalH) / 2 - minR * size * Math.sqrt(3) + size * 0.5;
+  const fullW = size * (deltaX + 2);
+  const fullH = size * (deltaY + Math.sqrt(3));
+  const clearW = w - left - right;
+  const clearH = h - top - bot;
+  const leftEdge = left + (clearW - fullW) / 2;
+  const topEdge = top + (clearH - fullH) / 2;
+
+  // place so the outer edges of the extreme hexes sit on leftEdge / topEdge
+  const originX = leftEdge - minUX * size + size;
+  const originY = topEdge - minUY * size + (Math.sqrt(3) / 2) * size;
 
   const positions = {};
   for (let i = 0; i < keys.length; i++) {
@@ -72,7 +82,7 @@ MapDraw.render = function (ctx, country, layout, highlightKey) {
 };
 
 MapDraw.drawHex = function (ctx, x, y, size, hex, highlight) {
-  MapDraw.hexPath(ctx, x, y, size * 0.94);
+  MapDraw.hexPath(ctx, x, y, size * 0.9);
   let fill = "#1a3a1a";
   let stroke = "#4a7a4a";
   let lineW = Math.max(1.5, size * 0.08);
@@ -82,7 +92,7 @@ MapDraw.drawHex = function (ctx, x, y, size, hex, highlight) {
     lineW = Math.max(2, size * 0.12);
   } else if (hex.stage === STAGE_RED_OUTLINE) {
     fill = "#1a3a1a";
-    stroke = "#e15a52";
+    stroke = "#f7a227";
     lineW = Math.max(2, size * 0.12);
   } else if (hex.stage === STAGE_INFECTED) {
     const pieces = hex.plan && hex.plan.stamps ? hex.plan.stamps.length : 4;

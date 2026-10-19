@@ -15,7 +15,25 @@ const MIN_BLOB_SIZE = 3;
 
 function GridBuilder() {}
 
+GridBuilder.rand = function () {
+  return GridBuilder._rng ? GridBuilder._rng() : Math.random();
+};
+
 GridBuilder.build = function (plan) {
+  const prev = GridBuilder._rng;
+  if (plan && plan.seed != null) {
+    GridBuilder._rng = mulberry32(plan.seed);
+  } else {
+    GridBuilder._rng = null;
+  }
+  try {
+    return GridBuilder._build(plan);
+  } finally {
+    GridBuilder._rng = prev;
+  }
+};
+
+GridBuilder._build = function (plan) {
   const rows = plan.rows | 0;
   const cols = plan.cols | 0;
   const stamps = plan.stamps && plan.stamps.length ? plan.stamps.slice() : ["33"];
@@ -117,7 +135,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     }
     const left = stamps.length - i;
     const canNew = left >= deficit + MIN_BLOB_SIZE;
-    const wantNew = i > 0 && canNew && Math.random() < 0.5;
+    const wantNew = i > 0 && canNew && GridBuilder.rand() < 0.5;
     const stampId = nextId;
     const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
@@ -133,7 +151,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
         if (sole[r][c] === lastId) lastSole.push({ r: r, c: c });
       }
     }
-    while (fuelChance > 0 && Math.random() < fuelChance && lastSole.length) {
+    while (fuelChance > 0 && GridBuilder.rand() < fuelChance && lastSole.length) {
       const fuel = GridBuilder.tryPlaceFuel(grid, lastId, lastSole, lastAnchor, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap, nextId, rows, cols);
       if (!fuel) break;
       if (fuel.fp) { fuel.fp.boardId = pieces.length; pieces.push(fuel.fp); }
@@ -195,7 +213,7 @@ GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
       }
     }
     if (!eligible.length || total <= 0) break;
-    let roll = Math.random() * total;
+    let roll = GridBuilder.rand() * total;
     let pick = eligible[eligible.length - 1];
     for (let i = 0; i < eligible.length; i++) {
       roll -= eligible[i].w;
@@ -499,12 +517,12 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     const seat = legal[i];
     const affinity = near(seat.fr, seat.fc, midR, midC);
     const flush = flushOf(seat);
-    const noise = 0.6 + Math.random() * 0.4;
+    const noise = 0.6 + GridBuilder.rand() * 0.4;
     seat.weight = ((1 - centered) + centered * affinity) * ((1 - tight) + tight * flush) * noise;
     if (seat.weight < 0.05) seat.weight = 0.05;
     total += seat.weight;
   }
-  let roll = Math.random() * total;
+  let roll = GridBuilder.rand() * total;
   let pick = legal[legal.length - 1];
   for (let i = 0; i < legal.length; i++) {
     roll -= legal[i].weight;
@@ -567,7 +585,7 @@ GridBuilder.paintCities = function (grid, np) {
   GridBuilder.shuffle(rim);
   const minRim = Math.max(0, ((np / 2) | 0) - p1);
   const maxRim = Math.max(2, np * 2 - p1);
-  const targetRim = minRim + ((Math.random() * (maxRim - minRim + 1)) | 0);
+  const targetRim = minRim + ((GridBuilder.rand() * (maxRim - minRim + 1)) | 0);
   let placedRim = 0;
   for (let i = 0; i < rim.length && placedRim < targetRim; i++) {
     const r = rim[i].r;
@@ -630,7 +648,7 @@ GridBuilder.paintCities = function (grid, np) {
         }
       }
       const bag = byRed ? redFlows : fieldFlows;
-      const times = bag[(Math.random() * bag.length) | 0];
+      const times = bag[(GridBuilder.rand() * bag.length) | 0];
       for (let t = 0; t < times; t++) {
         const open = [];
         for (let i = 0; i < blob.length; i++) {
@@ -647,7 +665,7 @@ GridBuilder.paintCities = function (grid, np) {
           }
         }
         if (!open.length) break;
-        const pick = open[(Math.random() * open.length) | 0];
+        const pick = open[(GridBuilder.rand() * open.length) | 0];
         let other = false;
         for (let d = 0; d < 4 && !other; d++) {
           const rr = pick.r + dirs[d][0];
@@ -741,7 +759,7 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
   let total = 0;
   for (let i = 0; i < legal.length; i++) total += legal[i].fresh;
   if (total <= 0) return null;
-  let roll = Math.random() * total;
+  let roll = GridBuilder.rand() * total;
   let pick = legal[legal.length - 1];
   for (let i = 0; i < legal.length; i++) {
     roll -= legal[i].fresh;
@@ -800,7 +818,7 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
       if (floor[ids[k]] > 0) w += 5 + floor[ids[k]];
     }
     w += adjStrong(p.r, p.c) * 3;          // strong grouping
-    w *= 0.55 + Math.random() * 0.9;       // noise
+    w *= 0.55 + GridBuilder.rand() * 0.9;       // noise
     return w;
   }
 
@@ -849,14 +867,14 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
       if (cell.strength > 1) continue;
       const adj = adjStrong(p.r, p.c);
       const group = 1 + adj * 0.55;
-      const noise = 0.65 + Math.random() * 0.7;
+      const noise = 0.65 + GridBuilder.rand() * 0.7;
       const chance = Math.min(1, stronger * group * noise);
-      if (Math.random() >= chance) continue;
+      if (GridBuilder.rand() >= chance) continue;
 
       const ids = stampsOn[p.r][p.c] || [];
       let st = 0;
       for (let k = 0; k < ids.length; k++) {
-        if (Math.random() < stronger) st++;
+        if (GridBuilder.rand() < stronger) st++;
       }
       st = Math.max(1, Math.min(st, cover[p.r][p.c]));
       if (st > 1) {
@@ -869,12 +887,13 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
 
 GridBuilder.shuffle = function (list) {
   for (let i = list.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
+    const j = (GridBuilder.rand() * (i + 1)) | 0;
     const tmp = list[i];
     list[i] = list[j];
     list[j] = tmp;
   }
 };
+
 
 
 

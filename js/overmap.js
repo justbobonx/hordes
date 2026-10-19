@@ -46,10 +46,15 @@ Overmap.dist = function (a, b) {
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
 };
 
+Overmap.planSeed = function (countrySeed, q, r) {
+  return (countrySeed ^ (q * 0x9e3779b1) ^ (r * 0x85ebca6b)) >>> 0;
+};
+
 Overmap.generate = function (seed, targetCount, startWave) {
   targetCount = targetCount || 33;
   startWave = startWave || 7;
-  const rng = mulberry32(seed || Date.now());
+  const countrySeed = seed || Date.now();
+  const rng = mulberry32(countrySeed);
   const hexes = {};
 
   // Organic blob
@@ -143,12 +148,15 @@ Overmap.generate = function (seed, targetCount, startWave) {
     h.wave = nextWave;
     const cards = Planner.offer(nextWave);
     h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
-    if (h.plan) h.plan.wave = nextWave;
+    if (h.plan) {
+      h.plan.wave = nextWave;
+      h.plan.seed = Overmap.planSeed(countrySeed, h.q, h.r);
+    }
     nextWave++;
   }
 
   const country = {
-    seed: seed || Date.now(),
+    seed: countrySeed,
     time: 0,
     nextWave: nextWave,
     hexes: hexes,
@@ -226,7 +234,10 @@ Overmap.advance = function (country) {
       const wave = country.nextWave || 7;
       const cards = Planner.offer(wave);
       h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
-      if (h.plan) h.plan.wave = wave;
+      if (h.plan) {
+        h.plan.wave = wave;
+        h.plan.seed = Overmap.planSeed(country.seed || 0, h.q, h.r);
+      }
       h.wave = wave;
       country.nextWave = wave + 1;
     }
