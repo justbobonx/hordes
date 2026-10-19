@@ -235,6 +235,7 @@ Ui.prototype.bind = function (handlers) {
   let skipClick = false;
   start.addEventListener("pointerdown", function (e) {
     if (e.button && e.button !== 0) return;
+    if (e.ctrlKey || e.metaKey) return; // don't arm long-press for ctrl/meta click
     armed = false;
     skipClick = false;
     if (timer) window.clearTimeout(timer);
@@ -273,6 +274,12 @@ Ui.prototype.bind = function (handlers) {
       skipClick = false;
       e.preventDefault();
       e.stopPropagation();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (handlers.resetMap) handlers.resetMap();
       return;
     }
     if (handlers.start) handlers.start();

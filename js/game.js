@@ -124,6 +124,9 @@ Game.prototype.bind = function () {
     startOver: function () {
       self.startOver();
     },
+    resetMap: function () {
+      self.resetMapAfterIntro();
+    },
     help: function () {
       self.chrome.enter();
       self.onStart(true);
@@ -206,6 +209,32 @@ Game.prototype.startOver = function () {
   this.setMode("level");
   this.ui.showStart();
   this.updateHud();
+};
+
+Game.prototype.resetMapAfterIntro = function () {
+  this.abortActions();
+  Save.clearBoard();
+  Save.clearCountry();
+  this.grid = null;
+  this.initial = null;
+  this.queue = [];
+  this.used = [];
+  this.plan = null;
+  this.lost = false;
+  this.ended = null;
+  this.clockOn = 0;
+  this.storyQueue = [];
+  this.storyAfter = null;
+  this.country = null;
+  this.activeHexKey = null;
+  this.pendingRetry = false;
+  this.clearHold();
+  this.preview = null;
+  this.ui.hidePlan();
+  this.ui.hideStory();
+  this.ui.hideStart();
+  // leave introDone / seen.start so story stays skipped
+  this.finishIntro();
 };
 
 Game.prototype.onStart = function (help) {
@@ -1098,5 +1127,6 @@ Game.prototype.updateMapHud = function () {
   const elStatus = document.getElementById("map-status");
   if (elStatus) elStatus.textContent = this.country.status || "";
 };
+
 
 
