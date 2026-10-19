@@ -213,10 +213,11 @@ GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
 // Shared safety check for a concrete footprint.
 // Same rules a normal stamp uses: size, fresh minimum, uniqueMin protection for every earlier piece.
 // Returns {fresh, need} or null.
+// uniqueMinVal is original keep (full - ss). overlap scales the keep used for placement constraints.
 GridBuilder.legalFootprint = function (cells, id, uniqueMinVal, overlap, cover, sole, own, uniqueMin) {
   if (!cells || !cells.length || !uniqueMinVal) return null;
   const ov = overlap || 0;
-  const overlapMin = uniqueMinVal * (1 - ov);
+  const adjustedKeep = uniqueMinVal * (1 - ov);
   let fresh = 0;
   const lost = [];
   for (let i = 0; i < cells.length; i++) {
@@ -229,11 +230,11 @@ GridBuilder.legalFootprint = function (cells, id, uniqueMinVal, overlap, cover, 
     }
   }
   if (cells.length < uniqueMinVal) return null;
-  const overlapping = fresh < cells.length;
-  const need = overlapping ? overlapMin : uniqueMinVal;
+  const need = adjustedKeep;
   if (fresh < need) return null;
   for (let s = 0; s < id; s++) {
-    if ((own[s] || 0) - (lost[s] || 0) < (uniqueMin[s] || 0)) return null;
+    const prevKeep = (uniqueMin[s] || 0) * (1 - ov);
+    if ((own[s] || 0) - (lost[s] || 0) < prevKeep) return null;
   }
   return { fresh: fresh, need: need };
 };
@@ -304,8 +305,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   const ss = Math.min(shape.w, shape.h);
   const uniqueMinVal = full - ss;
   const ov = overlap || 0;
-  const overlapMin = uniqueMinVal * (1 - ov);
-  let strongN = Math.max(0, uniqueMinVal - overlapMin); // exact floor: uniqueMin * overlap
+  let strongN = uniqueMinVal * ov; // floor from original keep * overlap
   const rowAnchors = [];
   const colAnchors = [];
   if (shape && shape.h & 1) {
@@ -516,7 +516,7 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   const committed = GridBuilder.commitPiece(grid, pick.cells, id, uniqueMinVal, strongN, pick.join, pick.hits, nextBlob, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, stampsOn, null);
   if (!committed || own[id] < (pick.need || 0)) return null;
   const fp = Footprint.fromStamp(rows, cols, kind, pick.row, pick.col);
-  if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need || uniqueMinVal; fp.strongN = strongN; }
+  if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need !== undefined ? pick.need : uniqueMinVal; fp.strongN = strongN; }
   return { spawned: committed.spawned, row: pick.row, col: pick.col, fp: fp };
 };
 
@@ -677,8 +677,7 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
   const FUEL_SS = 3;
   const uniqueMinVal = FUEL_FULL - FUEL_SS;
   const ov = overlap || 0;
-  const overlapMin = uniqueMinVal * (1 - ov);
-  let strongN = Math.max(0, uniqueMinVal - overlapMin); // exact floor: uniqueMin * overlap
+  let strongN = uniqueMinVal * ov; // floor from original keep * overlap
 
   const order = candidates.slice();
   GridBuilder.shuffle(order);
@@ -758,7 +757,7 @@ GridBuilder.tryPlaceFuel = function (grid, prevId, candidates, prevAnchor, cover
   const fuelCell = grid.at(pick.fuelCell.r, pick.fuelCell.c);
   if (fuelCell) fuelCell.setType("fuel");
   const fp = Footprint.fromFuel(rows, cols, pick.fuelCell.r, pick.fuelCell.c, prevAnchor.r, prevAnchor.c);
-  if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need || uniqueMinVal; fp.strongN = strongN; }
+  if (fp) { fp.uniqueMin = uniqueMinVal; fp.need = pick.need !== undefined ? pick.need : uniqueMinVal; fp.strongN = strongN; }
   return { id: nextId, soleCells: committed.soleCells, spawned: committed.spawned, anchor: { r: pick.fuelCell.r, c: pick.fuelCell.c }, fp: fp };
 };
 
@@ -872,6 +871,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 

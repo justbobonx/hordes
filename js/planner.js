@@ -113,9 +113,7 @@ Planner.offer = function (wave) {
   if ( w >= EXTRAS_UNLOCK.strength.minlevel && Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
     overlap = Math.random();
     stronger = Math.random();
-  }
-  overlap = 1;
-  stronger = 1;
+  }  
   return [{
     plan: Plan.copy({
       wave: w,
