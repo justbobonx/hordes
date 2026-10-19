@@ -41,6 +41,15 @@ function Game() {
   this.sprites = null;
   this.undoStack = [];
   this.pendingUndo = null;
+  this.mode = "level";
+  this.country = null;
+  this.mapCanvas = null;
+  this.mapCtx = null;
+  this.mapLayout = null;
+  this.pendingRetry = false;
+  this.activeHexKey = null;
+  this.mapBound = false;
+  this.introDone = false;
 }
 
 Game.prototype.boot = function () {
@@ -51,16 +60,31 @@ Game.prototype.boot = function () {
     this.seen = run.seen || {};
     this.elapsedMs = run.elapsedMs | 0;
     this.resets = run.resets | 0;
+    this.introDone = !!run.introDone;
   }
+  this.country = Save.readCountry();
   this.testPlan = Plan.fromQuery(location.search);
+  this.mapCanvas = document.getElementById("map");
+  this.mapCtx = this.mapCanvas ? this.mapCanvas.getContext("2d") : null;
   this.bind();
+  const mapMenu = document.getElementById("btn-map-menu");
+  if (mapMenu) {
+    const self = this;
+    mapMenu.addEventListener("click", function () { self.startOver(); });
+  }
   this.layout();
   const self = this;
   this.sprites = SpriteBank.defaults(function () {});
   const board = Save.readBoard();
-  if (board && board.cells) this.restore(board);
-  else this.ui.showStart();
+  if (this.country) {
+    this.setMode("map");
+  } else {
+    this.setMode("level");
+    if (board && board.cells) this.restore(board);
+    else this.ui.showStart();
+  }
   this.updateHud();
+  this.updateMapHud();
   this.loop();
   window.addEventListener("resize", function () {
     self.layout();
@@ -117,7 +141,7 @@ Game.prototype.bind = function () {
     },
     reset: function () {
       if (self.ended === "win") self.onEnd();
-      else self.resetWave();
+      else self.onLevelExit("retry");
     },
     undo: function () {
       self.onUndo();
@@ -148,6 +172,7 @@ Game.prototype.startOver = function () {
   this.abortActions();
   Save.clearBoard();
   Save.clearRun();
+  Save.clearCountry();
   this.wave = 1;
   this.cleared = 0;
   this.seen = {};
@@ -163,10 +188,15 @@ Game.prototype.startOver = function () {
   this.clockOn = 0;
   this.storyQueue = [];
   this.storyAfter = null;
+  this.country = null;
+  this.introDone = false;
+  this.activeHexKey = null;
+  this.pendingRetry = false;
   this.clearHold();
   this.preview = null;
   this.ui.hidePlan();
   this.ui.hideStory();
+  this.setMode("level");
   this.ui.showStart();
   this.updateHud();
 };
@@ -359,8 +389,7 @@ Game.prototype.giveUp = function () {
   this.undoStack = [];
   this.pendingUndo = null;
   Save.clearBoard();
-  this.ui.showStart();
-  this.updateHud();
+  this.onLevelExit("quit");
 };
 
 Game.prototype.onEnd = function () {
@@ -369,11 +398,10 @@ Game.prototype.onEnd = function () {
   Save.clearBoard();
   if (won && !this.testPlan) {
     this.cleared++;
-    this.wave++;
     this.persistRun();
   }
   this.grid = null;
-  this.openPlan();
+  this.onLevelExit(won ? "win" : "lose");
 };
 
 Game.prototype.finish = function () {
@@ -819,6 +847,7 @@ Game.prototype.persistRun = function () {
     seen: this.seen,
     elapsedMs: elapsed,
     resets: this.resets | 0,
+    introDone: !!this.introDone,
   });
 };
 
@@ -846,4 +875,183 @@ Game.prototype.persist = function () {
 
 
 
+
+
+Game.prototype.setMode = function (mode) {
+  this.mode = mode;
+  const board = this.ui.canvas;
+  const map = this.mapCanvas;
+  const mapTop = document.getElementById("map-hud-top");
+  const mapBot = document.getElementById("map-hud-bottom");
+  const levelHud = document.getElementById("hud-bottom");
+  if (mode === "map") {
+    if (board) board.classList.add("inactive");
+    if (map) map.classList.add("active");
+    if (mapTop) mapTop.hidden = false;
+    if (mapBot) mapBot.hidden = false;
+    if (levelHud) levelHud.style.display = "none";
+    this.bindMap();
+    this.layoutMap();
+    this.drawMap();
+  } else {
+    if (board) board.classList.remove("inactive");
+    if (map) map.classList.remove("active");
+    if (mapTop) mapTop.hidden = true;
+    if (mapBot) mapBot.hidden = true;
+    if (levelHud) levelHud.style.display = "";
+    this.unbindMap();
+    this.layout();
+  }
+  this.updateMapHud();
+};
+
+Game.prototype.bindMap = function () {
+  if (this.mapBound || !this.mapCanvas) return;
+  this.mapBound = true;
+  const self = this;
+  this._mapDown = function (e) { self.onMapDown(e); };
+  this._mapUp = function (e) { self.onMapUp(e); };
+  this.mapCanvas.addEventListener("pointerdown", this._mapDown);
+  this.mapCanvas.addEventListener("pointerup", this._mapUp);
+};
+
+Game.prototype.unbindMap = function () {
+  if (!this.mapBound || !this.mapCanvas) return;
+  this.mapBound = false;
+  if (this._mapDown) this.mapCanvas.removeEventListener("pointerdown", this._mapDown);
+  if (this._mapUp) this.mapCanvas.removeEventListener("pointerup", this._mapUp);
+};
+
+Game.prototype.layoutMap = function () {
+  if (!this.mapCanvas || !this.country) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  this.mapCanvas.style.width = w + "px";
+  this.mapCanvas.style.height = h + "px";
+  this.mapCanvas.width = Math.floor(w * dpr);
+  this.mapCanvas.height = Math.floor(h * dpr);
+  this.mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  this.mapLayout = MapDraw.layout(this.mapCanvas, this.country);
+};
+
+Game.prototype.drawMap = function () {
+  if (!this.mapCtx || !this.country || !this.mapLayout) return;
+  MapDraw.render(this.mapCtx, this.country, this.mapLayout, this.activeHexKey);
+};
+
+Game.prototype.onMapDown = function (e) {
+  if (this.mode !== "map" || !this.country) return;
+  e.preventDefault();
+  const rect = this.mapCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  if (this.pendingRetry) {
+    this.pendingRetry = false;
+    const hint = document.getElementById("map-tap-hint");
+    if (hint) hint.hidden = true;
+    this.setMode("level");
+    if (this.grid && this.initial) this.resetWave();
+    return;
+  }
+  const key = MapDraw.hit(this.mapLayout, x, y);
+  if (!key) return;
+  const hex = this.country.hexes[key];
+  if (!hex || hex.stage !== STAGE_INFECTED || !hex.plan) return;
+  this.activeHexKey = key;
+  this.drawMap();
+  this.ui.paintPlans([{ plan: hex.plan, locked: false }]);
+  this.ui.showPlan();
+  const self = this;
+  const orig = this.ui.onPlanPick;
+  this.ui.onPlanPick = function (card) {
+    self.ui.onPlanPick = orig;
+    self.ui.hidePlan();
+    self.enterHexLevel(key);
+  };
+};
+
+Game.prototype.onMapUp = function (e) {};
+
+Game.prototype.enterHexLevel = function (key) {
+  const hex = this.country.hexes[key];
+  if (!hex || !hex.plan) return;
+  this.activeHexKey = key;
+  this.setMode("level");
+  this.beginWave(hex.plan);
+};
+
+Game.prototype.onLevelExit = function (reason) {
+  if (!this.country) {
+    if (reason === "win") {
+      this.wave++;
+      this.persistRun();
+      if (this.wave > 6 || !Planner.INTRO[this.wave]) {
+        this.finishIntro();
+      } else {
+        this.openPlan();
+      }
+    } else if (reason === "retry") {
+      this.resetWave();
+    } else {
+      this.giveUp();
+    }
+    return;
+  }
+  const key = this.activeHexKey;
+  if (reason === "win" && key) {
+    Overmap.clearInfected(this.country, key);
+    this.country.wins = (this.country.wins | 0) + 1;
+  }
+  if (reason === "lose") this.country.losses = (this.country.losses | 0) + 1;
+  Overmap.tick(this.country);
+  Save.writeCountry(this.country);
+  this.layoutMap();
+  this.drawMap();
+  this.updateMapHud();
+  if (Overmap.isWin(this.country)) {
+    this.country.status = "COUNTRY CLEARED";
+  } else if (Overmap.isLoss(this.country)) {
+    this.country.status = "THE HORDE CONSUMED THE COUNTRY";
+  } else {
+    this.country.status = "";
+  }
+  this.updateMapHud();
+  if (reason === "retry") {
+    this.pendingRetry = true;
+    const hint = document.getElementById("map-tap-hint");
+    if (hint) hint.hidden = false;
+    this.setMode("map");
+  } else {
+    this.activeHexKey = null;
+    this.setMode("map");
+  }
+};
+
+Game.prototype.finishIntro = function () {
+  this.introDone = true;
+  this.country = Overmap.generate(Date.now(), 32, 7);
+  Save.writeCountry(this.country);
+  this.persistRun();
+  this.setMode("map");
+};
+
+Game.prototype.updateMapHud = function () {
+  if (!this.country) return;
+  let infected = 0;
+  const keys = Object.keys(this.country.hexes);
+  for (let i = 0; i < keys.length; i++) {
+    if (this.country.hexes[keys[i]].stage === STAGE_INFECTED) infected++;
+  }
+  const elI = document.getElementById("map-infected");
+  const elT = document.getElementById("map-time");
+  const elW = document.getElementById("map-wins");
+  const elL = document.getElementById("map-losses");
+  if (elI) elI.textContent = "INFECTED " + infected;
+  if (elT) elT.textContent = "DAY " + (this.country.time | 0);
+  if (elW) elW.textContent = "WINS " + (this.country.wins | 0);
+  if (elL) elL.textContent = "LOSSES " + (this.country.losses | 0);
+  const elStatus = document.getElementById("map-status");
+  if (elStatus) elStatus.textContent = this.country.status || "";
+};
 

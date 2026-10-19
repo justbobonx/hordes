@@ -1,5 +1,6 @@
 const SAVE_BOARD = "horde_board";
 const SAVE_RUN = "horde_run";
+const SAVE_COUNTRY = "horde_country";
 
 function Save() {}
 
@@ -44,5 +45,26 @@ Save.writeRun = function (data) {
 Save.clearRun = function () {
   try {
     localStorage.removeItem(SAVE_RUN);
+  } catch (err) {}
+};
+
+Save.readCountry = function () {
+  try {
+    const data = JSON.parse(localStorage.getItem(SAVE_COUNTRY) || "null");
+    return data && data.hexes ? Overmap.deserialize(data) : null;
+  } catch (err) {
+    return null;
+  }
+};
+
+Save.writeCountry = function (country) {
+  try {
+    localStorage.setItem(SAVE_COUNTRY, JSON.stringify(Overmap.serialize(country)));
+  } catch (err) {}
+};
+
+Save.clearCountry = function () {
+  try {
+    localStorage.removeItem(SAVE_COUNTRY);
   } catch (err) {}
 };

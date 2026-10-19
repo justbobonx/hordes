@@ -6,10 +6,11 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>hordes</title>
-    <link rel="stylesheet" href="css/style.css?v=0.5.7" />
+    <link rel="stylesheet" href="css/style.css?v=0.6.0" />
   </head>
   <body>
     <canvas id="board"></canvas>
+    <canvas id="map"></canvas>
 
     <div id="hud-bottom">
       <div class="hud-left"><span id="wave-label">WAVE 1</span></div>
@@ -22,6 +23,17 @@
       </div>
     </div>
 
+    <div id="map-hud-top" class="map-hud" hidden>
+      <span id="map-infected">INFECTED 0</span>
+      <span id="map-time">TIME 0</span>
+      <span id="map-wins">WINS 0</span>
+      <span id="map-losses">LOSSES 0</span>
+    </div>
+    <div id="map-hud-bottom" class="map-hud" hidden>
+      <button id="btn-map-menu" type="button">BACK</button>
+      <span id="map-status"></span><span id="map-tap-hint" hidden>TAP TO CONTINUE</span>
+    </div>
+
     <div id="start-screen" class="overlay">
       <div class="start-panel">
         <h1>
@@ -32,7 +44,7 @@
         <button id="btn-help" class="btn-title" type="button">Help</button>
       </div>
       <a id="startEmail" href="https://x.com/just_bob" target="_blank" rel="noopener noreferrer">just_bob@X.com</a>
-      <div id="startVer">v=0.5.7</div>
+      <div id="startVer">v=0.6.0</div>
     </div>
 
     <div id="plan-screen" class="overlay" hidden>
@@ -44,20 +56,22 @@
       <div id="story-slot"></div>
     </div>
 
-    <script src="js/sprite.js?v=0.5.7"></script>
-    <script src="js/cell.js?v=0.5.7"></script>
-    <script src="js/footprint.js?v=0.5.7"></script>
-    <script src="js/grid.js?v=0.5.7"></script>
-    <script src="js/grid_builder.js?v=0.5.7"></script>
-    <script src="js/save.js?v=0.5.7"></script>
-    <script src="js/plan.js?v=0.5.7"></script>
-    <script src="js/planner.js?v=0.5.7"></script>
-    <script src="js/story.js?v=0.5.7"></script>
-    <script src="js/chrome.js?v=0.5.7"></script>
-    <script src="js/ui.js?v=0.5.7"></script>
-    <script src="js/game.js?v=0.5.7"></script>
-    <script src="js/mechanics.js?v=0.5.7"></script>
-    <script src="js/drawing.js?v=0.5.7"></script>
-    <script src="js/city-name-generator.js?v=0.5.7"></script>
+    <script src="js/sprite.js?v=0.6.0"></script>
+    <script src="js/cell.js?v=0.6.0"></script>
+    <script src="js/footprint.js?v=0.6.0"></script>
+    <script src="js/grid.js?v=0.6.0"></script>
+    <script src="js/grid_builder.js?v=0.6.0"></script>
+    <script src="js/save.js?v=0.6.0"></script>
+    <script src="js/plan.js?v=0.6.0"></script>
+    <script src="js/planner.js?v=0.6.0"></script>
+    <script src="js/story.js?v=0.6.0"></script>
+    <script src="js/chrome.js?v=0.6.0"></script>
+    <script src="js/overmap.js?v=0.6.0"></script>
+    <script src="js/overmap-draw.js?v=0.6.0"></script>
+    <script src="js/ui.js?v=0.6.0"></script>
+    <script src="js/game.js?v=0.6.0"></script>
+    <script src="js/mechanics.js?v=0.6.0"></script>
+    <script src="js/drawing.js?v=0.6.0"></script>
+    <script src="js/city-name-generator.js?v=0.6.0"></script>
   </body>
 </html>

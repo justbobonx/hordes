@@ -143,7 +143,8 @@ Game.prototype.drawTray = function (ctx) {
 Game.prototype.loop = function () {
   const self = this;
   function tick() {
-    self.draw();
+    if (self.mode === "map") self.drawMap();
+    else self.draw();
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
@@ -210,7 +211,6 @@ Game.prototype.drawBoard = function (ctx) {
   const orangeInset = Math.max(6, o.cell * 0.18);
   const fuelSeen = {};
   const queue = [];
-  // Origin for the first fuel is the aimed stamp's anchor, same as the builder.
   for (let i = 0; i < primary.length; i++) {
     const cell = this.grid.at(primary[i].r, primary[i].c);
     if (cell && cell.is("fuel")) queue.push({ fuel: primary[i], prevR: row, prevC: col });
@@ -238,7 +238,6 @@ Game.prototype.drawBoard = function (ctx) {
       ctx.strokeRect(x + orangeInset, y + orangeInset, o.cell - orangeInset * 2, o.cell - orangeInset * 2);
       const ncell = this.grid.at(orange[i].r, orange[i].c);
       if (ncell && ncell.is("fuel") && !fuelSeen[ok]) {
-        // Next fuel orients off this fuel cell, same as the builder chain.
         queue.push({ fuel: orange[i], prevR: fuel.r, prevC: fuel.c });
       }
     }
