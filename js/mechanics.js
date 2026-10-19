@@ -237,9 +237,10 @@ Game.prototype.settleStamp = function () {
   }
   this.selectedQ = this.queue.length ? 0 : null;
   this.preview = null;
+  if (!this.queue.length) this.finish();
+  this.commitPendingUndo();
   this.persist();
   this.updateHud();
-  if (!this.queue.length) this.finish();
 };
 
 Game.prototype.flushActions = function () {
@@ -269,6 +270,7 @@ Game.prototype.flushActions = function () {
   this.selectedQ = this.queue.length ? 0 : null;
   this.preview = null;
   if (this.grid && !this.queue.length) this.finish();
+  this.commitPendingUndo();
 };
 
 Game.prototype.abortActions = function () {
@@ -279,4 +281,5 @@ Game.prototype.abortActions = function () {
   this.hintLock = false;
   this.actions = [];
   this.stampHeld = false;
+  this.pendingUndo = null;
 };

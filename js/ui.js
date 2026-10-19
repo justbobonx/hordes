@@ -7,6 +7,7 @@ function Ui() {
   this.elStatus = document.getElementById("status-msg");
   this.elHudBottom = document.getElementById("hud-bottom");
   this.btnBack = document.getElementById("btn-back");
+  this.btnUndo = document.getElementById("btn-undo");
   this.btnHint = document.getElementById("btn-hint");
   this.btnReset = document.getElementById("btn-reset");
   this.btnStart = document.getElementById("btn-start");
@@ -94,6 +95,7 @@ Ui.prototype.paintHud = function (view) {
   }
   this.paintStatus(view);
   if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
+  if (this.btnUndo) this.btnUndo.disabled = !view.canUndo;
   if (this.btnReset) this.btnReset.textContent = view.resetLabel || "RESET";
 };
 
@@ -222,6 +224,7 @@ Ui.prototype.bind = function (handlers) {
     if (handlers.planBack) handlers.planBack();
   });
   on(this.btnBack, "click", handlers.back);
+  on(this.btnUndo, "click", handlers.undo);
   on(this.btnHint, "click", handlers.hint);
   on(this.btnReset, "click", handlers.reset);
   const start = this.btnStart;

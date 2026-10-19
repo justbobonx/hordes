@@ -102,6 +102,11 @@ button {
 
 button:active { background: #31422e; }
 
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .overlay {
   position: fixed;
   inset: 0;

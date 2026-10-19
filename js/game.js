@@ -10,6 +10,8 @@ function Game() {
   this.initial = null;
   this.queue = [];
   this.used = [];
+  this.undoStack = [];
+  this.pendingUndo = null;
   this.plan = null;
   this.wave = 1;
   this.cleared = 0;
@@ -37,6 +39,8 @@ function Game() {
   this.hintLock = false;
   this.hintTimer = 0;
   this.sprites = null;
+  this.undoStack = [];
+  this.pendingUndo = null;
 }
 
 Game.prototype.boot = function () {
@@ -114,6 +118,9 @@ Game.prototype.bind = function () {
     reset: function () {
       if (self.ended === "win") self.onEnd();
       else self.resetWave();
+    },
+    undo: function () {
+      self.onUndo();
     },
   });
   const canvas = this.ui.canvas;
@@ -240,6 +247,8 @@ Game.prototype.beginWave = function (plan) {
   this.grid.writeTypes(this.initial);
   this.restoreStrength(this.initialStrength);
   this.used = [];
+  this.undoStack = [];
+  this.pendingUndo = null;
   this.rebuildQueue();
   this.lost = false;
   this.ended = null;
@@ -326,6 +335,8 @@ Game.prototype.resetWave = function () {
   this.grid.writeTypes(this.initial);
   if (this.initialStrength) this.restoreStrength(this.initialStrength);
   this.used = [];
+  this.undoStack = [];
+  this.pendingUndo = null;
   this.rebuildQueue();
   this.lost = false;
   this.ended = null;
@@ -345,6 +356,8 @@ Game.prototype.giveUp = function () {
   this.preview = null;
   this.grid = null;
   this.ended = null;
+  this.undoStack = [];
+  this.pendingUndo = null;
   Save.clearBoard();
   this.ui.showStart();
   this.updateHud();
@@ -439,6 +452,12 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
   const pruned = this.reachable(cells, seeds, row, col);
   if (!pruned.length) return;
   if (!this.enqueueProp(pruned, seeds, hint, row, col)) return;
+  this.pendingUndo = {
+    piece: boardId,
+    types: this.grid.types(),
+    strengths: this.grid.strengths(),
+    oStrengths: this.grid.oStrengths(),
+  };
   this.stampHeld = true;
   this.stampHeldIndex = qIndex;
   this.preview = null;
@@ -664,6 +683,69 @@ Game.prototype.cycleCell = function (row, col) {
 
 
 
+
+Game.prototype.diffUndo = function (types, strengths, oStrengths) {
+  const changes = [];
+  if (!this.grid || !types) return changes;
+  for (let r = 0; r < this.grid.rows; r++) {
+    for (let c = 0; c < this.grid.cols; c++) {
+      const cell = this.grid.at(r, c);
+      if (!cell) continue;
+      const oldType = types[r] && types[r][c];
+      const oldStr = (strengths && strengths[r] && strengths[r][c]) || 1;
+      const oldO = (oStrengths && oStrengths[r] && oStrengths[r][c]) || 1;
+      if (cell.type !== oldType || (cell.strength || 1) !== oldStr || (cell.oStrength || 1) !== oldO) {
+        changes.push({ r: r, c: c, type: oldType, strength: oldStr, oStrength: oldO });
+      }
+    }
+  }
+  return changes;
+};
+
+Game.prototype.commitPendingUndo = function () {
+  if (!this.pendingUndo || !this.grid || this.ended === "win") {
+    this.pendingUndo = null;
+    return;
+  }
+  const changes = this.diffUndo(this.pendingUndo.types, this.pendingUndo.strengths, this.pendingUndo.oStrengths);
+  if (changes.length) {
+    this.undoStack.push({
+      piece: this.pendingUndo.piece,
+      changeCells: changes,
+    });
+  }
+  this.pendingUndo = null;
+};
+
+Game.prototype.onUndo = function () {
+  if (!this.grid || this.ended === "win" || this.waiting() || !this.undoStack.length) return;
+  if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
+  const rec = this.undoStack.pop();
+  if (!rec) return;
+  for (let i = 0; i < rec.changeCells.length; i++) {
+    const ch = rec.changeCells[i];
+    const cell = this.grid.at(ch.r, ch.c);
+    if (!cell) continue;
+    cell.setType(ch.type);
+    cell.strength = ch.strength > 1 ? ch.strength : 1;
+    cell.oStrength = ch.oStrength > 1 ? ch.oStrength : 1;
+  }
+  this.grid.dress();
+  const idx = this.used.indexOf(rec.piece);
+  if (idx >= 0) this.used.splice(idx, 1);
+  this.rebuildQueue();
+  this.lost = this.grid.ruinedCount() > 0;
+  if (this.ended === "lose") {
+    this.ended = null;
+    this.clockOn = Date.now();
+  }
+  this.selectedQ = this.queue.length ? 0 : null;
+  this.preview = null;
+  this.clearHold();
+  this.persist();
+  this.updateHud();
+};
+
 Game.prototype.updateHud = function () {
   const status = this.statusView();
   this.ui.paintHud({
@@ -675,6 +757,7 @@ Game.prototype.updateHud = function () {
     statusClass: status.cls,
     resetLabel: status.resetLabel,
     hideHint: status.hideHint,
+    canUndo: this.undoStack.length > 0 && this.ended !== "win",
   });
 };
 
