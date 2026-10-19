@@ -4,6 +4,9 @@
 // Sprite code and assets stay loaded either way.
 const USE_SPRITES = false;
 
+// Extra inset growth per hit taken (fraction of cell size).
+const STRENGTH_INSET_GROW = 0.04;
+
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
@@ -55,6 +58,7 @@ function Cell(type) {
   this.seed = (Math.random() * 0xffffffff) >>> 0;
   this.phase = Math.random() * Math.PI * 2;
   this.strength = 1;
+  this.oStrength = 1;
   this.dress();
 }
 
@@ -64,7 +68,10 @@ Cell.prototype.is = function (name) {
 
 Cell.prototype.setType = function (name) {
   this.type = CELL_TYPES[name] ? name : "grass";
-  if (this.type !== "horde") this.strength = 1;
+  if (this.type !== "horde") {
+    this.strength = 1;
+    this.oStrength = 1;
+  }
   this.dress();
 };
 
@@ -115,7 +122,10 @@ Cell.dressGrid = function (grid) {
 };
 
 Cell.prototype.draw = function (ctx, sprites, x, y, size) {
-  const inset = Math.max(1, size * 0.06);
+  const baseInset = Math.max(1, size * 0.06);
+  const hits = Math.max(0, (this.oStrength || 1) - (this.strength || 1));
+  const extra = hits * STRENGTH_INSET_GROW * size;
+  const inset = baseInset + extra;
   const ix = x + inset;
   const iy = y + inset;
   const is = size - inset * 2;
@@ -237,16 +247,16 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.stroke();
   }
 
-  // Strength number for multi-hit horde
+  // Strength number for multi-hit horde (show even after shrinking to 1)
   if (this.type === "horde" && this.strength > 1) {
-    const offset= size * 0.05;
-    ctx.font = size*1.2 + "px m5x7, monospace";    
+    const offset = size * 0.05;
+    const fontScale = Math.max(0.72, 1 - hits * 0.1);
+    ctx.font = (size * 1.2 * fontScale) + "px m5x7, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#442222";
-    ctx.fillText(String(this.strength), x + size / 2 + offset*1.5, y + size / 2 );
+    ctx.fillText(String(this.strength), x + size / 2 + offset * 1.5, y + size / 2);
     ctx.fillStyle = "#e5ce7a";
-    ctx.fillText(String(this.strength), x + size / 2 + offset/2, y + size / 2 - offset );
-    
+    ctx.fillText(String(this.strength), x + size / 2 + offset / 2, y + size / 2 - offset);
   }
 };

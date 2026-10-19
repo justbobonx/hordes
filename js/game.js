@@ -259,6 +259,18 @@ Game.prototype.restore = function (data) {
   this.initial = data.initial || this.grid.types();
   this.initialStrength = data.initialStrength || null;
   if (data.strengths && this.grid.writeStrengths) this.grid.writeStrengths(data.strengths);
+  if (data.oStrengths && this.grid.writeOStrengths) {
+    this.grid.writeOStrengths(data.oStrengths);
+  } else if (this.initialStrength) {
+    for (let r = 0; r < this.grid.rows; r++) {
+      for (let c = 0; c < this.grid.cols; c++) {
+        const cell = this.grid.at(r, c);
+        if (!cell) continue;
+        const st = this.initialStrength[r] && this.initialStrength[r][c];
+        cell.oStrength = st > 1 ? st : 1;
+      }
+    }
+  }
   this.used = Array.isArray(data.used) ? data.used.slice() : [];
   this.queue = Array.isArray(data.queue) ? data.queue.slice() : [];
   if (!this.queue.length) this.rebuildQueue();
@@ -282,7 +294,9 @@ Game.prototype.restoreStrength = function (strengths) {
       const cell = this.grid.at(r, c);
       if (!cell) continue;
       const st = strengths[r] && strengths[r][c];
-      cell.strength = st > 1 ? st : 1;
+      const val = st > 1 ? st : 1;
+      cell.strength = val;
+      cell.oStrength = val;
     }
   }
 };
@@ -733,6 +747,7 @@ Game.prototype.persist = function () {
     cols: this.grid.cols,
     cells: this.grid.types(),
     strengths: this.grid.strengths(),
+    oStrengths: this.grid.oStrengths(),
     pieces: this.grid.pieces.map(function (p) { return p.toJSON(); }),
     initial: this.initial,
     initialStrength: this.initialStrength,
@@ -745,6 +760,7 @@ Game.prototype.persist = function () {
     testPlan: this.testPlan,
   });
 };
+
 
 
 

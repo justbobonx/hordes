@@ -837,6 +837,7 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
     st = Math.max(1, st);
     st = Math.min(st, cover[best.r][best.c]);
     grid.at(best.r, best.c).strength = st;
+    grid.at(best.r, best.c).oStrength = st;
   }
 
   // Pass 2: excess density from relative stronger.
@@ -858,7 +859,10 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
         if (Math.random() < stronger) st++;
       }
       st = Math.max(1, Math.min(st, cover[p.r][p.c]));
-      if (st > 1) cell.strength = st;
+      if (st > 1) {
+        cell.strength = st;
+        cell.oStrength = st;
+      }
     }
   }
 };
@@ -871,6 +875,7 @@ GridBuilder.shuffle = function (list) {
     list[j] = tmp;
   }
 };
+
 
 
 

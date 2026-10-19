@@ -158,10 +158,30 @@ Grid.prototype.writeStrengths = function (rows) {
   }
 };
 
+Grid.prototype.oStrengths = function () {
+  const rows = [];
+  for (let r = 0; r < this.rows; r++) {
+    const row = [];
+    for (let c = 0; c < this.cols; c++) row.push(this.cells[r][c].oStrength || 1);
+    rows.push(row);
+  }
+  return rows;
+};
+
+Grid.prototype.writeOStrengths = function (rows) {
+  if (!rows) return;
+  for (let r = 0; r < this.rows; r++) {
+    for (let c = 0; c < this.cols; c++) {
+      const st = rows[r] && rows[r][c];
+      this.cells[r][c].oStrength = st > 1 ? st : 1;
+    }
+  }
+};
+
 Grid.prototype.dump = function () {
   const pieces = [];
   for (let i = 0; i < this.pieces.length; i++) pieces.push(this.pieces[i].toJSON());
-  return { rows: this.rows, cols: this.cols, cells: this.types(), strengths: this.strengths(), pieces: pieces };
+  return { rows: this.rows, cols: this.cols, cells: this.types(), strengths: this.strengths(), oStrengths: this.oStrengths(), pieces: pieces };
 };
 
 Grid.load = function (data) {
@@ -172,6 +192,16 @@ Grid.load = function (data) {
   const grid = new Grid(rows, cols);
   grid.writeTypes(data.cells);
   if (data.strengths) grid.writeStrengths(data.strengths);
+  if (data.oStrengths) {
+    grid.writeOStrengths(data.oStrengths);
+  } else {
+    for (let r = 0; r < grid.rows; r++) {
+      for (let c = 0; c < grid.cols; c++) {
+        const cell = grid.at(r, c);
+        cell.oStrength = cell.strength || 1;
+      }
+    }
+  }
   grid.pieces = [];
   if (Array.isArray(data.pieces)) {
     for (let i = 0; i < data.pieces.length; i++) {
