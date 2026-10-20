@@ -10,16 +10,37 @@ function Ui() {
   this.btnUndo = document.getElementById("btn-undo");
   this.btnHint = document.getElementById("btn-hint");
   this.btnReset = document.getElementById("btn-reset");
-  this.btnStart = document.getElementById("btn-start");
+  this.btnCampaign = document.getElementById("btn-campaign");
+  this.btnEndless = document.getElementById("btn-endless");
   this.btnHelp = document.getElementById("btn-help");
+  this.modeRowCampaign = document.getElementById("mode-row-campaign");
+  this.modeRowEndless = document.getElementById("mode-row-endless");
+  if (!this.modeRowCampaign || !this.modeRowEndless) {
+    const panel = this.elStart && this.elStart.querySelector(".start-panel");
+    if (panel) {
+      if (!this.modeRowCampaign) {
+        this.modeRowCampaign = document.createElement("div");
+        this.modeRowCampaign.id = "mode-row-campaign";
+        this.modeRowCampaign.className = "mode-row";
+        panel.insertBefore(this.modeRowCampaign, this.btnHelp);
+      }
+      if (!this.modeRowEndless) {
+        this.modeRowEndless = document.createElement("div");
+        this.modeRowEndless.id = "mode-row-endless";
+        this.modeRowEndless.className = "mode-row";
+        panel.insertBefore(this.modeRowEndless, this.btnHelp);
+      }
+    }
+  }
   this.elStart = document.getElementById("start-screen");
   this.elPlan = document.getElementById("plan-screen");
   this.elPlanRow = document.getElementById("plan-row");
-  this.btnPlanBack = document.getElementById("btn-plan-back");
   this.elStory = document.getElementById("story-screen");
   this.elStorySlot = document.getElementById("story-slot");
   this.onPlanPick = null;
+  this.onPlanBack = null;
   this.onStoryContinue = null;
+  this.expandedMode = null;
 }
 
 Ui.prototype.planOpen = function () {
@@ -75,7 +96,9 @@ Ui.prototype.hudPad = function () {
 
 Ui.prototype.paintHud = function (view) {
   if (this.elWave) {
-    let label = view.testPlan ? "TEST" : "WAVE " + view.wave;
+    let prefix = "WAVE ";
+    if (view.isTutorial) prefix = "TUTORIAL ";
+    let label = view.testPlan ? "TEST" : prefix + view.wave;
     if (view.plan) {
       const c = Math.round((+view.plan.centered || 0) * 100);
       const f = Math.round((+view.plan.tight || 0) * 100);
@@ -120,17 +143,17 @@ Ui.prototype.paintPlans = function (cards) {
 
 Ui.prototype.makeCard = function (card, index) {
   const plan = card.plan;
-  const btn = document.createElement("button");
-  btn.type = "button";
+  const self = this;
+  const btn = document.createElement("div");
   btn.className = "plan-card";
   btn.setAttribute("data-index", String(index));
 
-  const wave = document.createElement("div");
-  wave.className = "plan-wave";
-  wave.innerHTML  = plan.wave ? "WAVE " + plan.wave : "TEST";
-  wave.innerHTML  += "<br>"+generateCityName();
-  
-  btn.appendChild(wave);
+  const waveLabel = document.createElement("div");
+  waveLabel.className = "plan-wave";
+  const prefix = card.isTutorial ? "TUTORIAL " : "WAVE ";
+  waveLabel.innerHTML = plan.wave ? prefix + plan.wave : "TEST";
+  waveLabel.innerHTML += "<br>" + generateCityName();
+  btn.appendChild(waveLabel);
 
   const size = document.createElement("div");
   size.className = "plan-size";
@@ -157,12 +180,26 @@ Ui.prototype.makeCard = function (card, index) {
   meta.innerHTML = metaText;
   btn.appendChild(meta);
 
-  const foot = document.createElement("span");
-  foot.className = "plan-select";
-  foot.textContent = "SELECT";
-  btn.appendChild(foot);
+  const actions = document.createElement("div");
+  actions.className = "plan-actions";
+  const backBtn = document.createElement("button");
+  backBtn.type = "button";
+  backBtn.textContent = "Back";
+  backBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (self.onPlanBack) self.onPlanBack();
+  });
+  const goBtn = document.createElement("button");
+  goBtn.type = "button";
+  goBtn.textContent = "GO!";
+  goBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (self.onPlanPick) self.onPlanPick(card, index);
+  });
+  actions.appendChild(backBtn);
+  actions.appendChild(goBtn);
+  btn.appendChild(actions);
 
-  const self = this;
   btn.addEventListener("click", function (e) {
     e.stopPropagation();
     if (self.onPlanPick) self.onPlanPick(card, index);
@@ -216,72 +253,96 @@ Ui.prototype.bind = function (handlers) {
   const on = function (el, ev, fn) {
     if (el && fn) el.addEventListener(ev, fn);
   };
+  this.handlers = handlers;
   this.onPlanPick = handlers.planPick || null;
+  this.onPlanBack = handlers.planBack || null;
   this.onStoryContinue = handlers.storyContinue || null;
   on(this.btnHelp, "click", handlers.help);
-  on(this.btnPlanBack, "click", function (e) {
-    e.stopPropagation();
-    if (handlers.planBack) handlers.planBack();
-  });
   on(this.btnBack, "click", handlers.back);
   on(this.btnUndo, "click", handlers.undo);
   on(this.btnHint, "click", handlers.hint);
   on(this.btnReset, "click", handlers.reset);
-  const start = this.btnStart;
-  if (!start) return;
-  const label = start.textContent;
-  let timer = 0;
-  let armed = false;
-  let skipClick = false;
-  start.addEventListener("pointerdown", function (e) {
-    if (e.button && e.button !== 0) return;
-    if (e.ctrlKey || e.metaKey) return; // don't arm long-press for ctrl/meta click
-    armed = false;
-    skipClick = false;
-    if (timer) window.clearTimeout(timer);
-    timer = window.setTimeout(function () {
+
+  const self = this;
+  document.addEventListener("click", function (e) {
+    if (!self.startOpen() || !self.expandedMode) return;
+    const panel = self.elStart && self.elStart.querySelector(".start-panel");
+    if (panel && !panel.contains(e.target)) {
+      self.expandedMode = null;
+      self.renderModeRows();
+    }
+  });
+  if (this.elStart) {
+    let timer = 0;
+    this.elStart.addEventListener("pointerdown", function (e) {
+      if (e.target.closest("button")) return;
+      timer = window.setTimeout(function () {
+        timer = 0;
+        if (self.handlers && self.handlers.startOver) self.handlers.startOver();
+      }, 800);
+    });
+    this.elStart.addEventListener("pointerup", function () {
+      if (timer) window.clearTimeout(timer);
       timer = 0;
-      armed = true;
-      start.textContent = "Start Over";
-    }, 500);
-  });
-  start.addEventListener("pointerup", function () {
-    if (timer) window.clearTimeout(timer);
-    timer = 0;
-    if (!armed) return;
-    armed = false;
-    skipClick = true;
-    start.textContent = label;
-    if (handlers.startOver) handlers.startOver();
-  });
-  start.addEventListener("pointerleave", function () {
-    if (timer) window.clearTimeout(timer);
-    timer = 0;
-    armed = false;
-    start.textContent = label;
-  });
-  start.addEventListener("pointercancel", function () {
-    if (timer) window.clearTimeout(timer);
-    timer = 0;
-    armed = false;
-    start.textContent = label;
-  });
-  start.addEventListener("contextmenu", function (e) {
-    e.preventDefault();
-  });
-  start.addEventListener("click", function (e) {
-    if (skipClick) {
-      skipClick = false;
-      e.preventDefault();
-      e.stopPropagation();
-      return;
+    });
+    this.elStart.addEventListener("pointercancel", function () {
+      if (timer) window.clearTimeout(timer);
+      timer = 0;
+    });
+  }
+  this.renderModeRows();
+};
+
+Ui.prototype.renderModeRows = function () {
+  const handlers = this.handlers || {};
+  const self = this;
+  function fillRow(row, mode, hasSave, info) {
+    if (!row) return;
+    row.innerHTML = "";
+    if (self.expandedMode === mode && hasSave) {
+      const cont = document.createElement("button");
+      cont.type = "button";
+      cont.className = "btn-title";
+      cont.textContent = "Continue";
+      cont.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (handlers.continueMode) handlers.continueMode(mode);
+      });
+      const neu = document.createElement("button");
+      neu.type = "button";
+      neu.className = "btn-title";
+      neu.textContent = "New";
+      neu.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (handlers.newMode) handlers.newMode(mode);
+      });
+      row.appendChild(cont);
+      row.appendChild(neu);
+      if (info) {
+        const infoEl = document.createElement("div");
+        infoEl.className = "continue-info";
+        infoEl.textContent = info;
+        row.parentNode.insertBefore(infoEl, row.nextSibling);
+      }
+    } else {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-title";
+      btn.textContent = mode === "campaign" ? "Campaign" : "Endless";
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (hasSave) {
+          self.expandedMode = mode;
+          self.renderModeRows();
+        } else if (handlers.newMode) {
+          handlers.newMode(mode);
+        }
+      });
+      row.appendChild(btn);
     }
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (handlers.resetMap) handlers.resetMap();
-      return;
-    }
-    if (handlers.start) handlers.start();
-  });
+  }
+  const infos = this.elStart ? this.elStart.querySelectorAll(".continue-info") : [];
+  for (let i = 0; i < infos.length; i++) infos[i].remove();
+  fillRow(this.modeRowCampaign, "campaign", handlers.hasCampaignSave, handlers.campaignInfo);
+  fillRow(this.modeRowEndless, "endless", handlers.hasEndlessSave, handlers.endlessInfo);
 };

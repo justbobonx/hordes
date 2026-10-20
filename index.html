@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>hordes</title>
-    <link rel="stylesheet" href="css/style.css?v=0.6.2" />
+    <link rel="stylesheet" href="css/style.css?v=0.7.0" />
   </head>
   <body>
     <canvas id="board"></canvas>
@@ -25,9 +25,10 @@
 
     <div id="map-hud-top" class="map-hud" hidden>
       <span id="map-infected">INFECTED 0</span>
-      <span id="map-time">TIME 0</span>
+      <span id="map-time">DAY 0</span>
       <span id="map-wins">WINS 0</span>
-      <span id="map-losses">LOSSES 0</span>
+      <span id="map-tries">TRIES 0</span>
+      <span id="map-total-time">TIME 0:00</span>
     </div>
     <div id="map-hud-bottom" class="map-hud" hidden>
       <button id="btn-map-menu" type="button">BACK</button>
@@ -40,38 +41,42 @@
           HORDES
           <span class="title-sub">in our cities</span>
         </h1>
-        <button id="btn-start" class="btn-title" type="button">Let's Go!</button>
+        <div id="mode-row-campaign" class="mode-row">
+          <button id="btn-campaign" class="btn-title" type="button">Campaign</button>
+        </div>
+        <div id="mode-row-endless" class="mode-row">
+          <button id="btn-endless" class="btn-title" type="button">Endless</button>
+        </div>
         <button id="btn-help" class="btn-title" type="button">Help</button>
       </div>
       <a id="startEmail" href="https://x.com/just_bob" target="_blank" rel="noopener noreferrer">just_bob@X.com</a>
-      <div id="startVer">v=0.6.2</div>
+      <div id="startVer">v=0.7.0</div>
     </div>
 
-    <div id="plan-screen" class="overlay" hidden>
+    <div id="plan-screen" class="overlay plan-overlay" hidden>
       <div id="plan-row" class="plan-row"></div>
-      <button id="btn-plan-back" type="button">BACK</button>
     </div>
 
     <div id="story-screen" class="overlay" hidden>
       <div id="story-slot"></div>
     </div>
 
-    <script src="js/sprite.js?v=0.6.2"></script>
-    <script src="js/cell.js?v=0.6.2"></script>
-    <script src="js/footprint.js?v=0.6.2"></script>
-    <script src="js/grid.js?v=0.6.2"></script>
-    <script src="js/grid_builder.js?v=0.6.2"></script>
-    <script src="js/save.js?v=0.6.2"></script>
-    <script src="js/plan.js?v=0.6.2"></script>
-    <script src="js/planner.js?v=0.6.2"></script>
-    <script src="js/story.js?v=0.6.2"></script>
-    <script src="js/chrome.js?v=0.6.2"></script>
-    <script src="js/overmap.js?v=0.6.2"></script>
-    <script src="js/overmap-draw.js?v=0.6.2"></script>
-    <script src="js/ui.js?v=0.6.2"></script>
-    <script src="js/game.js?v=0.6.2"></script>
-    <script src="js/mechanics.js?v=0.6.2"></script>
-    <script src="js/drawing.js?v=0.6.2"></script>
-    <script src="js/city-name-generator.js?v=0.6.2"></script>
+    <script src="js/sprite.js?v=0.7.0"></script>
+    <script src="js/cell.js?v=0.7.0"></script>
+    <script src="js/footprint.js?v=0.7.0"></script>
+    <script src="js/grid.js?v=0.7.0"></script>
+    <script src="js/grid_builder.js?v=0.7.0"></script>
+    <script src="js/save.js?v=0.7.0"></script>
+    <script src="js/plan.js?v=0.7.0"></script>
+    <script src="js/planner.js?v=0.7.0"></script>
+    <script src="js/story.js?v=0.7.0"></script>
+    <script src="js/chrome.js?v=0.7.0"></script>
+    <script src="js/overmap.js?v=0.7.0"></script>
+    <script src="js/overmap-draw.js?v=0.7.0"></script>
+    <script src="js/ui.js?v=0.7.0"></script>
+    <script src="js/game.js?v=0.7.0"></script>
+    <script src="js/mechanics.js?v=0.7.0"></script>
+    <script src="js/drawing.js?v=0.7.0"></script>
+    <script src="js/city-name-generator.js?v=0.7.0"></script>
   </body>
 </html>

@@ -19,20 +19,6 @@ Planner.INTRO = {
 
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
-  const scripted = Planner.INTRO[w];
-  if (scripted) {
-    return [{
-      plan: Plan.copy({
-        wave: w,
-        fuelChance: 0,
-        overlap: 0,
-        stronger: 0,
-        area: 1,        
-        ...scripted
-      }),
-      locked: false
-    }];
-  }
   //piece count per wave size from calculated base plus rando range
   // 1-8   | 4 | 2–4 |
   // 9–12  | 5 | 3–5 |
