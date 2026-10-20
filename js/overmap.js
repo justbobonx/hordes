@@ -82,7 +82,7 @@ Overmap.components = function (map) {
 };
 
 Overmap.generateShape = function (seed) {
-  const radius = 9;
+  const radius = 7;
   const threshold = 0.45;
   const live = {};
   function noise(q, r) {
@@ -252,7 +252,7 @@ Overmap.generate = function (seed, targetCount, startWave) {
   startWave = startWave || 7;
   const MAX_LAND_TRIES = 10;
   const MAX_ADVANCE = 100;
-  const MIN_SEED_DIST = 2;
+  const MIN_SEED_DIST = 4;
   for (let landTry = 0; landTry < MAX_LAND_TRIES; landTry++) {
     const countrySeed = (seed || Date.now()) + landTry * 0x9e3779b1;
     const rng = mulberry32(countrySeed);
