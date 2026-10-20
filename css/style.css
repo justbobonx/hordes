@@ -119,16 +119,6 @@ button:disabled {
   padding: 24px 16px;
 }
 
-.overlay.plan-overlay {
-  background: transparent;
-  pointer-events: none;
-}
-
-.overlay.plan-overlay .plan-card,
-.overlay.plan-overlay button {
-  pointer-events: auto;
-}
-
 .overlay[hidden] { display: none; }
 
 .start-panel, .panel, .story-card, .plan-card {

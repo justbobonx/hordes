@@ -120,6 +120,7 @@ Ui.prototype.paintHud = function (view) {
   if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
   if (this.btnUndo) this.btnUndo.disabled = !view.canUndo;
   if (this.btnReset) this.btnReset.textContent = view.resetLabel || "RESET";
+  if (this.btnBack) this.btnBack.hidden = !!view.hideBack;
 };
 
 Ui.prototype.paintStatus = function (view) {
@@ -290,6 +291,18 @@ Ui.prototype.bind = function (handlers) {
       timer = 0;
     });
   }
+  this.renderModeRows();
+};
+
+Ui.prototype.updateStartInfo = function (data) {
+  if (!this.handlers) this.handlers = {};
+  if (data) {
+    this.handlers.hasCampaignSave = !!data.hasCampaignSave;
+    this.handlers.hasEndlessSave = !!data.hasEndlessSave;
+    this.handlers.campaignInfo = data.campaignInfo || "";
+    this.handlers.endlessInfo = data.endlessInfo || "";
+  }
+  this.expandedMode = null;
   this.renderModeRows();
 };
 

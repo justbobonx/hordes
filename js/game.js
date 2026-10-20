@@ -71,26 +71,14 @@ Game.prototype.boot = function () {
   if (mapMenu) {
     const self = this;
     mapMenu.addEventListener("click", function () {
-      self.pauseClock();
       self.persist();
-      self.grid = null;
-      self.plan = null;
-      self.ended = null;
-      self.activeHexKey = null;
-      self.setMode("level");
-      self.ui.hidePlan();
-      self.ui.hideStory();
-      self.refreshStart();
-      self.ui.showStart();
+      self.returnToStart();
     });
   }
   this.layout();
   const self = this;
   this.sprites = SpriteBank.defaults(function () {});
-  this.ui.hidePlan();
-  this.ui.hideStory();
-  this.refreshStart();
-  this.ui.showStart();
+  this.returnToStart();
   this.updateHud();
   this.updateMapHud();
   this.loop();
@@ -203,9 +191,23 @@ Game.prototype.refreshStart = function () {
     campaignInfo: this.campaignInfo(),
     endlessInfo: this.endlessInfo(),
   };
-  if (typeof this.ui.updateStartInfo === "function") {
-    this.ui.updateStartInfo(data);
-  }
+  this.ui.updateStartInfo(data);
+};
+
+Game.prototype.returnToStart = function () {
+  this.abortActions();
+  this.pauseClock();
+  this.clearHold();
+  this.preview = null;
+  this.grid = null;
+  this.plan = null;
+  this.ended = null;
+  this.activeHexKey = null;
+  this.ui.hidePlan();
+  this.ui.hideStory();
+  this.setMode("start");
+  this.refreshStart();
+  this.ui.showStart();
 };
 
 Game.prototype.enterMode = function (mode, isNew) {
@@ -282,16 +284,8 @@ Game.prototype.onPlanBack = function () {
     this.activeHexKey = null;
     this.setMode("map");
   } else {
-    this.pauseClock();
     this.persist();
-    this.grid = null;
-    this.plan = null;
-    this.ended = null;
-    this.activeHexKey = null;
-    this.setMode("level");
-    this.ui.hideStory();
-    this.refreshStart();
-    this.ui.showStart();
+    this.returnToStart();
   }
 };
 
@@ -323,11 +317,7 @@ Game.prototype.startOver = function () {
   this.mapTicking = false;
   this.clearHold();
   this.preview = null;
-  this.ui.hidePlan();
-  this.ui.hideStory();
-  this.setMode("level");
-  this.refreshStart();
-  this.ui.showStart();
+  this.returnToStart();
   this.updateHud();
 };
 
@@ -400,6 +390,9 @@ Game.prototype.openPlan = function () {
     for (let i = 0; i < cards.length; i++) cards[i].isTutorial = false;
   }
   this.ui.paintPlans(cards);
+  this.ui.hideStart();
+  this.ui.hideStory();
+  this.setMode("plan");
   this.ui.showPlan();
   this.updateHud();
 };
@@ -429,8 +422,7 @@ Game.prototype.advanceStory = function () {
 
 Game.prototype.afterStory = function (after) {
   if (after === "title") {
-    this.refreshStart();
-    this.ui.showStart();
+    this.returnToStart();
     return;
   }
   if (after === "play") {
@@ -452,6 +444,10 @@ Game.prototype.onPlan = function (card) {
 
 Game.prototype.beginWave = function (plan) {
   this.abortActions();
+  this.setMode("level");
+  this.ui.hidePlan();
+  this.ui.hideStory();
+  this.ui.hideStart();
   this.plan = Plan.copy(plan);
   if (this.plan.seed == null) {
     this.plan.seed = (Math.random() * 0x100000000) >>> 0;
@@ -980,12 +976,13 @@ Game.prototype.updateHud = function () {
     statusClass: status.cls,
     resetLabel: status.resetLabel,
     hideHint: status.hideHint,
+    hideBack: status.hideBack,
     canUndo: this.undoStack.length > 0 && this.ended !== "win",
   });
 };
 
 Game.prototype.statusView = function () {
-  if (!this.grid) return { text: "", cls: "", resetLabel: "RESET", hideHint: false };
+  if (!this.grid) return { text: "", cls: "", resetLabel: "RESET", hideHint: false, hideBack: false };
   const cities = this.grid.ruinedCount();
   const hordeGone = this.grid.redCount() === 0 && !this.lost;
   const piecesGone = this.queue.length === 0;
@@ -1018,6 +1015,7 @@ Game.prototype.statusView = function () {
     cls: cls,
     resetLabel: resetLabel,
     hideHint: piecesGone,
+    hideBack: this.ended === "win",
   };
 };
 
@@ -1081,23 +1079,20 @@ Game.prototype.setMode = function (mode) {
   const mapTop = document.getElementById("map-hud-top");
   const mapBot = document.getElementById("map-hud-bottom");
   const levelHud = document.getElementById("hud-bottom");
-  if (mode === "map") {
-    if (board) board.classList.add("inactive");
-    if (map) map.classList.add("active");
-    if (mapTop) mapTop.hidden = false;
-    if (mapBot) mapBot.hidden = false;
-    if (levelHud) levelHud.style.display = "none";
+  const isMap = mode === "map";
+  const isLevel = mode === "level";
+  if (board) board.classList.toggle("inactive", !isLevel);
+  if (map) map.classList.toggle("active", isMap);
+  if (mapTop) mapTop.hidden = !isMap;
+  if (mapBot) mapBot.hidden = !isMap;
+  if (levelHud) levelHud.style.display = isLevel ? "" : "none";
+  if (isMap) {
     this.bindMap();
     this.layoutMap();
     this.drawMap();
   } else {
-    if (board) board.classList.remove("inactive");
-    if (map) map.classList.remove("active");
-    if (mapTop) mapTop.hidden = true;
-    if (mapBot) mapBot.hidden = true;
-    if (levelHud) levelHud.style.display = "";
     this.unbindMap();
-    this.layout();
+    if (isLevel) this.layout();
   }
   this.updateMapHud();
 };
@@ -1182,7 +1177,8 @@ Game.prototype.onMapDown = function (e) {
   const hex = this.country.hexes[key];
   if (!hex || hex.stage !== STAGE_INFECTED || !hex.plan) return;
   this.activeHexKey = key;
-  this.drawMap();
+  this.ui.hideStart();
+  this.setMode("plan");
   this.ui.paintPlans([{ plan: hex.plan, locked: false }]);
   this.ui.showPlan();
   const self = this;
@@ -1211,8 +1207,7 @@ Game.prototype.onLevelExit = function (reason) {
       Save.writeGlobal(this.global);
       this.startTutorial();
     } else {
-      this.refreshStart();
-      this.ui.showStart();
+      this.returnToStart();
     }
     this.grid = null;
     this.plan = null;
@@ -1229,11 +1224,7 @@ Game.prototype.onLevelExit = function (reason) {
     } else {
       this.persistRun();
       Save.clearBoard("endless");
-      this.grid = null;
-      this.plan = null;
-      this.ended = null;
-      this.refreshStart();
-      this.ui.showStart();
+      this.returnToStart();
     }
     return;
   }
@@ -1325,6 +1316,7 @@ Game.prototype.updateMapHud = function () {
   const elStatus = document.getElementById("map-status");
   if (elStatus) elStatus.textContent = this.country.status || "";
 };
+
 
 
 
