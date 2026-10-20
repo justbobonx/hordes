@@ -876,7 +876,7 @@ Game.prototype.statusView = function () {
     }
   }
   let resetLabel = "RESET";
-  if (this.ended === "win") resetLabel = "NEXT WAVE";
+  if (this.ended === "win") resetLabel = "DONE";
   else if (this.ended === "lose" || piecesGone) resetLabel = "TRY AGAIN";
   return {
     text: text,

@@ -5,7 +5,7 @@
 const USE_SPRITES = false;
 
 // Extra inset growth per hit taken (fraction of cell size).
-const STRENGTH_INSET_GROW = 0.04;
+const STRENGTH_INSET_GROW = 0.045;
 
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
@@ -126,13 +126,28 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
   const hits = Math.max(0, (this.oStrength || 1) - (this.strength || 1));
   const extra = hits * STRENGTH_INSET_GROW * size;
   const inset = baseInset + extra;
-  const ix = x + inset;
-  const iy = y + inset;
-  const is = size - inset * 2;
-
   const look = CELL_TYPES[this.type] || CELL_TYPES.grass;
   const base = Math.max(4, Math.floor(size * 0.18));
   const rad = Math.floor(base * (look.round || 1));
+
+  // burnt grass at normal inset when the horde has shrunk
+  if (hits > 0 && this.type === "horde") {
+    const bix = x + baseInset;
+    const biy = y + baseInset;
+    const bis = size - baseInset * 2;
+    const maxR = bis / 2;
+    const corners = [
+      Math.min(this.round[0] ? rad : 0, maxR),
+      Math.min(this.round[1] ? rad : 0, maxR),
+      Math.min(this.round[2] ? rad : 0, maxR),
+      Math.min(this.round[3] ? rad : 0, maxR),
+    ];
+    fillRounded(ctx, bix, biy, bis, corners, CELL_TYPES.cleared.fill);
+  }
+
+  const ix = x + inset;
+  const iy = y + inset;
+  const is = size - inset * 2;
   const maxR = is / 2;
   const corners = [
     Math.min(this.round[0] ? rad : 0, maxR),
@@ -149,15 +164,7 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     const amount = s >= 0 ? s * baseAmt * 0.6 : s * baseAmt * 1.3;
     fill = varyColor(look.fill, 0, amount);
   }
-  ctx.fillStyle = fill;
-
-  if (ctx.roundRect) {
-    ctx.beginPath();
-    ctx.roundRect(ix, iy, is, is, corners);
-    ctx.fill();
-  } else {
-    ctx.fillRect(ix, iy, is, is);
-  }
+  fillRounded(ctx, ix, iy, is, corners, fill);
 
   if (look.outline && ctx.roundRect) {
     const lw = Math.min(4, Math.max(2, size * 0.11));
@@ -167,7 +174,6 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.lineWidth = lw;
     ctx.lineCap = "butt";
     ctx.lineJoin = "round";
-
     // Top
     if (outer[0]) {
       ctx.beginPath();
@@ -226,13 +232,11 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
       ctx.stroke();
     }
   }
-
   if (USE_SPRITES && sprites) {
     const spr = sprites.get(this.type);
     if (spr) spr.draw(ctx, ix, iy, is);
     return;
   }
-
   // Procedural marks (Xs) when sprites are off. Centered on the full cell.
   const pad = size * 0.28;
   ctx.lineWidth = Math.max(2, size * 0.08);
@@ -246,7 +250,6 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.lineTo(x + pad, y + size - pad);
     ctx.stroke();
   }
-
   // Strength number for multi-hit horde (show even after shrinking to 1)
   if (this.type === "horde" && this.strength > 1) {
     const offset = size * 0.05;
@@ -260,3 +263,14 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     ctx.fillText(String(this.strength), x + size / 2 + offset / 2, y + size / 2 - offset);
   }
 };
+
+function fillRounded(ctx, x, y, size, corners, color) {
+  ctx.fillStyle = color;
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(x, y, size, size, corners);
+    ctx.fill();
+  } else {
+    ctx.fillRect(x, y, size, size);
+  }
+}
