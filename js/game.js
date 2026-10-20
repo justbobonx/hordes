@@ -80,6 +80,7 @@ Game.prototype.boot = function () {
       self.setMode("level");
       self.ui.hidePlan();
       self.ui.hideStory();
+      self.refreshStart();
       self.ui.showStart();
     });
   }
@@ -88,6 +89,7 @@ Game.prototype.boot = function () {
   this.sprites = SpriteBank.defaults(function () {});
   this.ui.hidePlan();
   this.ui.hideStory();
+  this.refreshStart();
   this.ui.showStart();
   this.updateHud();
   this.updateMapHud();
@@ -194,6 +196,18 @@ Game.prototype.endlessInfo = function () {
   return "WAVE " + (run.wave || 1);
 };
 
+Game.prototype.refreshStart = function () {
+  const data = {
+    hasCampaignSave: !!(Save.readCountry() || Save.readRun("campaign") || Save.readBoard("campaign")),
+    hasEndlessSave: !!(Save.readRun("endless") || Save.readBoard("endless")),
+    campaignInfo: this.campaignInfo(),
+    endlessInfo: this.endlessInfo(),
+  };
+  if (typeof this.ui.updateStartInfo === "function") {
+    this.ui.updateStartInfo(data);
+  }
+};
+
 Game.prototype.enterMode = function (mode, isNew) {
   this.gameMode = mode;
   this.ui.hideStart();
@@ -268,6 +282,15 @@ Game.prototype.onPlanBack = function () {
     this.activeHexKey = null;
     this.setMode("map");
   } else {
+    this.pauseClock();
+    this.persist();
+    this.grid = null;
+    this.plan = null;
+    this.ended = null;
+    this.activeHexKey = null;
+    this.setMode("level");
+    this.ui.hideStory();
+    this.refreshStart();
     this.ui.showStart();
   }
 };
@@ -303,6 +326,7 @@ Game.prototype.startOver = function () {
   this.ui.hidePlan();
   this.ui.hideStory();
   this.setMode("level");
+  this.refreshStart();
   this.ui.showStart();
   this.updateHud();
 };
@@ -405,6 +429,7 @@ Game.prototype.advanceStory = function () {
 
 Game.prototype.afterStory = function (after) {
   if (after === "title") {
+    this.refreshStart();
     this.ui.showStart();
     return;
   }
@@ -497,7 +522,6 @@ Game.prototype.restore = function (data) {
   if (this.ended) this.pauseClock();
 };
 
-
 Game.prototype.restoreStrength = function (strengths) {
   if (!this.grid || !strengths) return;
   for (let r = 0; r < this.grid.rows; r++) {
@@ -511,8 +535,6 @@ Game.prototype.restoreStrength = function (strengths) {
     }
   }
 };
-
-
 
 Game.prototype.pieceById = function (boardId) {
   if (!this.grid || !this.grid.pieces) return null;
@@ -883,9 +905,6 @@ Game.prototype.cycleCell = function (row, col) {
   this.persist();
 };
 
-
-
-
 Game.prototype.diffUndo = function (types, strengths, oStrengths) {
   const changes = [];
   if (!this.grid || !types) return changes;
@@ -1055,10 +1074,6 @@ Game.prototype.persist = function () {
   });
 };
 
-
-
-
-
 Game.prototype.setMode = function (mode) {
   this.mode = mode;
   const board = this.ui.canvas;
@@ -1196,6 +1211,7 @@ Game.prototype.onLevelExit = function (reason) {
       Save.writeGlobal(this.global);
       this.startTutorial();
     } else {
+      this.refreshStart();
       this.ui.showStart();
     }
     this.grid = null;
@@ -1216,6 +1232,7 @@ Game.prototype.onLevelExit = function (reason) {
       this.grid = null;
       this.plan = null;
       this.ended = null;
+      this.refreshStart();
       this.ui.showStart();
     }
     return;
