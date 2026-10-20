@@ -82,167 +82,106 @@ Overmap.components = function (map) {
 };
 
 Overmap.generateShape = function (seed) {
-  const radius = 7;
-  const threshold = 0.45;
+  const radius = 8;
+  const inletGoal = 9;
   const live = {};
-  function noise(q, r) {
-    let h = seed ^ (q * 0x9e3779b1) ^ (r * 0x85ebca6b);
-    h = Math.imul(h ^ h >>> 15, 1 | h);
-    h = Math.imul(h ^ h >>> 13, 61 | h);
-    return ((h ^ h >>> 16) >>> 0) / 4294967296;
-  }
-  // Proper axial disk
+  // solid disk
   for (let q = -radius; q <= radius; q++) {
     const r1 = Math.max(-radius, -q - radius);
     const r2 = Math.min(radius, -q + radius);
     for (let r = r1; r <= r2; r++) {
-      const n = noise(q, r);
-      const d = Overmap.dist({q:0, r:0}, {q, r});
-      const falloff = 1 - d / (radius + 1);
-      if (n * (0.6 + 0.4 * falloff) > threshold) {
-        live[Overmap.key(q, r)] = { q: q, r: r, stage: STAGE_CLEAR, plan: null, wave: 0 };
-      }
+      live[Overmap.key(q, r)] = { q, r, stage: STAGE_CLEAR, plan: null, wave: 0 };
     }
   }
-  // CA smoothing (3 gens)
-  for (let gen = 0; gen < 3; gen++) {
-    const next = {};
+  // deterministic RNG from seed
+  let s = seed >>> 0;
+  function rand() {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  }
+  const MIN = 42, MAX = 44;
+  let count = Object.keys(live).length;
+  while (count > MAX) {
+    // collect boundary cells (those with at least one empty neighbor)
+    const boundary = [];
+    const keys = Object.keys(live);
+    for (let i = 0; i < keys.length; i++) {
+      const h = live[keys[i]];
+      const neigh = Overmap.neighbors(h.q, h.r);
+      let open = 0;
+      for (let j = 0; j < neigh.length; j++) {
+        if (!live[Overmap.key(neigh[j].q, neigh[j].r)]) open++;
+      }
+      if (open > 0) boundary.push(keys[i]);
+    }
+    if (boundary.length === 0) break;
+    // bias toward cells with more open neighbors (creates inlets / bays)
+    boundary.sort((a, b) => {
+      const ha = live[a], hb = live[b];
+      let oa = 0, ob = 0;
+      const na = Overmap.neighbors(ha.q, ha.r);
+      const nb = Overmap.neighbors(hb.q, hb.r);
+      for (let j = 0; j < na.length; j++) if (!live[Overmap.key(na[j].q, na[j].r)]) oa++;
+      for (let j = 0; j < nb.length; j++) if (!live[Overmap.key(nb[j].q, nb[j].r)]) ob++;
+      return ob - oa || rand() - 0.5;
+    });
+    // remove the best candidate that does not strand any neighbor
+    let removed = false;
+    for (let i = 0; i < boundary.length; i++) {
+      const cand = boundary[i];
+      const h = live[cand];
+      const neigh = Overmap.neighbors(h.q, h.r);
+      let strands = false;
+      for (let j = 0; j < neigh.length; j++) {
+        const nk = Overmap.key(neigh[j].q, neigh[j].r);
+        if (!live[nk]) continue;
+        const nn = Overmap.neighbors(neigh[j].q, neigh[j].r);
+        let others = 0;
+        for (let k = 0; k < nn.length; k++) {
+          const nkk = Overmap.key(nn[k].q, nn[k].r);
+          if (nkk !== cand && live[nkk]) others++;
+        }
+        if (others === 0) { strands = true; break; }
+      }
+      if (!strands) {
+        delete live[cand];
+        count--;
+        removed = true;
+        break;
+      }
+    }
+    if (!removed) break;
+  }
+  // if we overshot below MIN (rare), grow back a little by filling the best empty neighbor
+  while (count < MIN) {
     const candidates = {};
     const keys = Object.keys(live);
     for (let i = 0; i < keys.length; i++) {
       const h = live[keys[i]];
-      candidates[keys[i]] = true;
       const neigh = Overmap.neighbors(h.q, h.r);
       for (let j = 0; j < neigh.length; j++) {
-        const nk = Overmap.key(neigh[j].q, neigh[j].r);
-        if (Overmap.dist({q:0,r:0}, neigh[j]) <= radius + 1)
-          candidates[nk] = true;
+        const n = neigh[j];
+        if (Overmap.dist({q:0, r:0}, n) > radius) continue;
+        const nk = Overmap.key(n.q, n.r);
+        if (!live[nk]) candidates[nk] = n;
       }
     }
     const ckeys = Object.keys(candidates);
+    if (ckeys.length === 0) break;
+    // prefer the one with most live neighbors
+    let best = ckeys[0], bestC = -1;
     for (let i = 0; i < ckeys.length; i++) {
-      const parts = ckeys[i].split(",");
-      const q = +parts[0], r = +parts[1];
-      const neigh = Overmap.neighbors(q, r);
-      let count = 0;
-      for (let j = 0; j < neigh.length; j++) {
-        if (live[Overmap.key(neigh[j].q, neigh[j].r)]) count++;
-      }
-      const wasLive = !!live[ckeys[i]];
-      if ((wasLive && count >= 2 && count <= 5) || (!wasLive && count >= 3 && count <= 4)) {
-        next[ckeys[i]] = { q: q, r: r, stage: STAGE_CLEAR, plan: null, wave: 0 };
-      }
-    }
-    for (const k in live) delete live[k];
-    for (const k in next) live[k] = next[k];
-  }
-  // Drop small components
-  const components = Overmap.components(live);
-  for (let i = 0; i < components.length; i++) {
-    if (components[i].length < 8) {
-      for (let j = 0; j < components[i].length; j++) delete live[components[i][j]];
-    }
-  }
-  // Trim peninsulas (≤1 neighbor)
-  let trimmed = true;
-  while (trimmed) {
-    trimmed = false;
-    const keys = Object.keys(live);
-    for (let i = 0; i < keys.length; i++) {
-      const h = live[keys[i]];
-      const neigh = Overmap.neighbors(h.q, h.r);
+      const n = candidates[ckeys[i]];
+      const neigh = Overmap.neighbors(n.q, n.r);
       let c = 0;
       for (let j = 0; j < neigh.length; j++) {
         if (live[Overmap.key(neigh[j].q, neigh[j].r)]) c++;
       }
-      if (c <= 1) {
-        delete live[keys[i]];
-        trimmed = true;
-      }
+      if (c > bestC) { bestC = c; best = ckeys[i]; }
     }
-  }
-  // Stricter 2nd pass: cut ≤2 hexes that are part of a thin chain
-  let budget = 12;
-  while (budget > 0) {
-    let cut = false;
-    const keys = Object.keys(live);
-    for (let i = 0; i < keys.length && budget > 0; i++) {
-      const h = live[keys[i]];
-      const neigh = Overmap.neighbors(h.q, h.r);
-      let c = 0;
-      const lowNeigh = [];
-      for (let j = 0; j < neigh.length; j++) {
-        const nk = Overmap.key(neigh[j].q, neigh[j].r);
-        if (live[nk]) {
-          c++;
-          const nn = Overmap.neighbors(neigh[j].q, neigh[j].r);
-          let nc = 0;
-          for (let k = 0; k < nn.length; k++) {
-            if (live[Overmap.key(nn[k].q, nn[k].r)]) nc++;
-          }
-          if (nc <= 2) lowNeigh.push(true);
-        }
-      }
-      if (c <= 2 && lowNeigh.length > 0) {
-        delete live[keys[i]];
-        budget--;
-        cut = true;
-      }
-    }
-    if (!cut) break;
-  }
-  // Lakes: keep largest enclosed component ≤3
-  const exterior = {};
-  const queue = [];
-  for (let q = -radius - 1; q <= radius + 1; q++) {
-    const r1 = Math.max(-radius - 1, -q - radius - 1);
-    const r2 = Math.min(radius + 1, -q + radius + 1);
-    for (let r = r1; r <= r2; r++) {
-      const k = Overmap.key(q, r);
-      if (live[k]) continue;
-      if (Overmap.dist({q:0,r:0}, {q,r}) >= radius) {
-        exterior[k] = true;
-        queue.push({q, r});
-      }
-    }
-  }
-  while (queue.length) {
-    const cur = queue.shift();
-    const neigh = Overmap.neighbors(cur.q, cur.r);
-    for (let j = 0; j < neigh.length; j++) {
-      const nk = Overmap.key(neigh[j].q, neigh[j].r);
-      if (!live[nk] && !exterior[nk] && Overmap.dist({q:0,r:0}, neigh[j]) <= radius + 1) {
-        exterior[nk] = true;
-        queue.push(neigh[j]);
-      }
-    }
-  }
-  const enclosed = {};
-  for (let q = -radius; q <= radius; q++) {
-    const r1 = Math.max(-radius, -q - radius);
-    const r2 = Math.min(radius, -q + radius);
-    for (let r = r1; r <= r2; r++) {
-      const k = Overmap.key(q, r);
-      if (!live[k] && !exterior[k]) enclosed[k] = {q, r};
-    }
-  }
-  const lakeComps = Overmap.components(enclosed);
-  let kept = null;
-  let best = 0;
-  for (let i = 0; i < lakeComps.length; i++) {
-    const len = lakeComps[i].length;
-    if (len <= 3 && len > best) {
-      best = len;
-      kept = lakeComps[i];
-    }
-  }
-  for (let i = 0; i < lakeComps.length; i++) {
-    if (lakeComps[i] === kept) continue;
-    for (let j = 0; j < lakeComps[i].length; j++) {
-      const k = lakeComps[i][j];
-      const parts = k.split(",");
-      live[k] = { q: +parts[0], r: +parts[1], stage: STAGE_CLEAR, plan: null, wave: 0 };
-    }
+    const parts = best.split(",");
+    live[best] = { q: +parts[0], r: +parts[1], stage: STAGE_CLEAR, plan: null, wave: 0 };
+    count++;
   }
   return live;
 };
@@ -252,7 +191,7 @@ Overmap.generate = function (seed, targetCount, startWave) {
   startWave = startWave || 7;
   const MAX_LAND_TRIES = 10;
   const MAX_ADVANCE = 100;
-  const MIN_SEED_DIST = 4;
+  const MIN_SEED_DIST = 5;
   for (let landTry = 0; landTry < MAX_LAND_TRIES; landTry++) {
     const countrySeed = (seed || Date.now()) + landTry * 0x9e3779b1;
     const rng = mulberry32(countrySeed);
