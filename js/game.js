@@ -2,6 +2,8 @@
 
 const AIM_COLOR = "#f2e27a";
 const AIM_HINT_COLOR = "#f7a227";
+const DAY_TICK_MS = 700;
+const FADE_MS = 550;
 
 function Game() {
   this.ui = new Ui();
@@ -22,6 +24,8 @@ function Game() {
   this.clockOn = 0;
   this.elapsedMs = 0;
   this.resets = 0;
+  this.hintCount = 0;
+  this.undoCount = 0;
   this.storyQueue = [];
   this.storyAfter = null;
   this.hold = null;
@@ -46,7 +50,8 @@ function Game() {
   this.mapCanvas = null;
   this.mapCtx = null;
   this.mapLayout = null;
-  this.pendingRetry = false;
+  this.mapTicking = false;
+  this.fade = null;
   this.activeHexKey = null;
   this.mapBound = false;
   this.introDone = false;
@@ -60,6 +65,8 @@ Game.prototype.boot = function () {
     this.seen = run.seen || {};
     this.elapsedMs = run.elapsedMs | 0;
     this.resets = run.resets | 0;
+    this.hintCount = run.hintCount | 0;
+    this.undoCount = run.undoCount | 0;
     this.introDone = !!run.introDone;
     this.activeHexKey = run.activeHexKey || null;
   }
@@ -151,7 +158,7 @@ Game.prototype.bind = function () {
     },
     reset: function () {
       if (self.ended === "win") self.onEnd();
-      else self.onLevelExit("retry");
+      else self.resetWave();
     },
     undo: function () {
       self.onUndo();
@@ -195,13 +202,15 @@ Game.prototype.startOver = function () {
   this.ended = null;
   this.elapsedMs = 0;
   this.resets = 0;
+  this.hintCount = 0;
+  this.undoCount = 0;
   this.clockOn = 0;
   this.storyQueue = [];
   this.storyAfter = null;
   this.country = null;
   this.introDone = false;
   this.activeHexKey = null;
-  this.pendingRetry = false;
+  this.mapTicking = false;
   this.clearHold();
   this.preview = null;
   this.ui.hidePlan();
@@ -227,7 +236,6 @@ Game.prototype.resetMapAfterIntro = function () {
   this.storyAfter = null;
   this.country = null;
   this.activeHexKey = null;
-  this.pendingRetry = false;
   this.clearHold();
   this.preview = null;
   this.ui.hidePlan();
@@ -331,6 +339,8 @@ Game.prototype.beginWave = function (plan) {
   this.ended = null;
   this.elapsedMs = 0;
   this.resets = 0;
+  this.hintCount = 0;
+  this.undoCount = 0;
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -488,6 +498,8 @@ Game.prototype.onHint = function () {
     self.hintTimer = 0;
     self.hintLock = false;
     if (!self.grid || self.ended || best >= self.queue.length) return;
+    self.hintCount = (self.hintCount | 0) + 1;
+    self.persistRun();
     self.beginDrop(fp.anchor.r, fp.anchor.c, true, best);
   }, 1000);
 };
@@ -808,6 +820,7 @@ Game.prototype.onUndo = function () {
   this.grid.dress();
   const idx = this.used.indexOf(rec.piece);
   if (idx >= 0) this.used.splice(idx, 1);
+  this.undoCount = (this.undoCount | 0) + 1;
   this.rebuildQueue();
   this.lost = this.grid.ruinedCount() > 0;
   if (this.ended === "lose") {
@@ -894,6 +907,8 @@ Game.prototype.persistRun = function () {
     seen: this.seen,
     elapsedMs: elapsed,
     resets: this.resets | 0,
+    hintCount: this.hintCount | 0,
+    undoCount: this.undoCount | 0,
     introDone: !!this.introDone,
     activeHexKey: this.activeHexKey || null,
   });
@@ -999,23 +1014,35 @@ Game.prototype.onResize = function () {
 
 Game.prototype.drawMap = function () {
   if (!this.mapCtx || !this.country || !this.mapLayout) return;
-  MapDraw.render(this.mapCtx, this.country, this.mapLayout, this.activeHexKey);
+  let fade = null;
+  if (this.fade) {
+    const elapsed = Date.now() - this.fade.start;
+    if (elapsed < this.fade.dur) {
+      fade = { oldStyles: this.fade.oldStyles, t: elapsed / this.fade.dur };
+    } else {
+      this.fade = null;
+    }
+  }
+  MapDraw.render(this.mapCtx, this.country, this.mapLayout, this.activeHexKey, fade);
+};
+
+Game.prototype.startMapFade = function (oldStyles) {
+  this.fade = { oldStyles: oldStyles, start: Date.now(), dur: FADE_MS };
+  const self = this;
+  function frame() {
+    if (!self.fade) return;
+    self.drawMap();
+    if (self.fade) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 };
 
 Game.prototype.onMapDown = function (e) {
-  if (this.mode !== "map" || !this.country) return;
+  if (this.mode !== "map" || !this.country || this.mapTicking) return;
   e.preventDefault();
   const rect = this.mapCanvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  if (this.pendingRetry) {
-    this.pendingRetry = false;
-    const hint = document.getElementById("map-tap-hint");
-    if (hint) hint.hidden = true;
-    this.setMode("level");
-    if (this.grid && this.initial) this.resetWave();
-    return;
-  }
   const key = MapDraw.hit(this.mapLayout, x, y);
   if (!key) return;
   const hex = this.country.hexes[key];
@@ -1070,34 +1097,59 @@ Game.prototype.onLevelExit = function (reason) {
     return;
   }
   const key = this.activeHexKey;
-  if (reason === "win" && key) {
-    Overmap.clearInfected(this.country, key);
-    this.country.wins = (this.country.wins | 0) + 1;
-  }
-  if (reason === "lose") this.country.losses = (this.country.losses | 0) + 1;
-  Overmap.tick(this.country);
-  Save.writeCountry(this.country);
+  const days = 1 + (this.resets | 0) + Math.floor(((this.hintCount | 0) + (this.undoCount | 0)) * 0.5);
+  this.resets = 0;
+  this.hintCount = 0;
+  this.undoCount = 0;
+  this.activeHexKey = null;
+  this.persistRun();
   Save.clearBoard();
-  this.layoutMap();
-  this.drawMap();
-  this.updateMapHud();
-  if (Overmap.isWin(this.country)) {
-    this.country.status = "COUNTRY CLEARED";
-  } else if (Overmap.isLoss(this.country)) {
-    this.country.status = "THE HORDE CONSUMED THE COUNTRY";
-  } else {
-    this.country.status = "";
+  this.grid = null;
+  this.ended = null;
+  this.plan = null;
+  if (reason === "lose") this.country.losses = (this.country.losses | 0) + 1;
+  this.setMode("map");
+  this.mapTicking = true;
+  const self = this;
+  const doClear = reason === "win" && key;
+  function finishTicks() {
+    if (Overmap.isWin(self.country)) {
+      self.country.status = "COUNTRY CLEARED";
+    } else if (Overmap.isLoss(self.country)) {
+      self.country.status = "THE HORDE CONSUMED THE COUNTRY";
+    } else {
+      self.country.status = "";
+    }
+    self.updateMapHud();
+    Save.writeCountry(self.country);
+    self.mapTicking = false;
   }
-  this.updateMapHud();
-  if (reason === "retry") {
-    this.pendingRetry = true;
-    const hint = document.getElementById("map-tap-hint");
-    if (hint) hint.hidden = false;
-    this.setMode("map");
+  function stepDays(remaining) {
+    if (remaining <= 0) {
+      finishTicks();
+      return;
+    }
+    window.setTimeout(function () {
+      const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
+      Overmap.tick(self.country);
+      Save.writeCountry(self.country);
+      self.startMapFade(old);
+      self.updateMapHud();
+      stepDays(remaining - 1);
+    }, DAY_TICK_MS);
+  }
+  if (doClear) {
+    window.setTimeout(function () {
+      const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
+      Overmap.clearInfected(self.country, key);
+      self.country.wins = (self.country.wins | 0) + 1;
+      Save.writeCountry(self.country);
+      self.startMapFade(old);
+      self.updateMapHud();
+      stepDays(days);
+    }, DAY_TICK_MS);
   } else {
-    this.activeHexKey = null;
-    this.persistRun();
-    this.setMode("map");
+    stepDays(days);
   }
 };
 
@@ -1127,6 +1179,7 @@ Game.prototype.updateMapHud = function () {
   const elStatus = document.getElementById("map-status");
   if (elStatus) elStatus.textContent = this.country.status || "";
 };
+
 
 
 

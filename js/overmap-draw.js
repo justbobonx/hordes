@@ -67,51 +67,94 @@ MapDraw.hexPath = function (ctx, x, y, size) {
   ctx.closePath();
 };
 
-MapDraw.render = function (ctx, country, layout, highlightKey) {
+MapDraw.styleFor = function (hex, size) {
+  const baseFill = [26, 58, 26];
+  const baseStroke = [74, 122, 74];
+  const baseLW = Math.max(1.5, size * 0.08);
+  const thickLW = Math.max(2, size * 0.12);
+  if (!hex || hex.stage === STAGE_CLEAR) {
+    return { fill: baseFill, stroke: baseStroke, lineW: baseLW };
+  }
+  if (hex.stage === STAGE_YELLOW) {
+    return { fill: baseFill, stroke: [242, 226, 122], lineW: thickLW };
+  }
+  if (hex.stage === STAGE_RED_OUTLINE) {
+    return { fill: baseFill, stroke: [247, 162, 39], lineW: thickLW };
+  }
+  // STAGE_INFECTED
+  const pieces = hex.plan && hex.plan.stamps ? hex.plan.stamps.length : 4;
+  const t = Math.max(0, Math.min(1, (pieces - 4) / 5));
+  const r = 110 + t * 90;
+  const g = 28 + t * 18;
+  const b = 28;
+  return { fill: [r | 0, g | 0, b], stroke: [225, 90, 82], lineW: baseLW };
+};
+
+MapDraw.captureStyles = function (country, size) {
+  const styles = {};
+  const keys = Object.keys(country.hexes);
+  for (let i = 0; i < keys.length; i++) {
+    styles[keys[i]] = MapDraw.styleFor(country.hexes[keys[i]], size);
+  }
+  return styles;
+};
+
+MapDraw.lerpColor = function (a, b, t) {
+  return [
+    (a[0] + (b[0] - a[0]) * t) | 0,
+    (a[1] + (b[1] - a[1]) * t) | 0,
+    (a[2] + (b[2] - a[2]) * t) | 0,
+  ];
+};
+
+MapDraw.render = function (ctx, country, layout, highlightKey, fade) {
   const dpr = window.devicePixelRatio || 1;
   const w = ctx.canvas.width / dpr;
   const h = ctx.canvas.height / dpr;
   ctx.fillStyle = "#0a1a2a";
   ctx.fillRect(0, 0, w, h);
   const keys = Object.keys(layout.positions || {});
+  const size = layout.size;
+  const t = fade && fade.t != null ? Math.max(0, Math.min(1, fade.t)) : 1;
+  const oldStyles = fade && fade.oldStyles;
   for (let i = 0; i < keys.length; i++) {
     const pos = layout.positions[keys[i]];
     const hex = country.hexes[keys[i]];
-    MapDraw.drawHex(ctx, pos.x, pos.y, layout.size, hex, keys[i] === highlightKey);
+    const highlight = keys[i] === highlightKey;
+    if (oldStyles && oldStyles[keys[i]] && t < 1) {
+      const from = oldStyles[keys[i]];
+      const to = MapDraw.styleFor(hex, size);
+      MapDraw.drawHexLerp(ctx, pos.x, pos.y, size, from, to, t, highlight);
+    } else {
+      MapDraw.drawHex(ctx, pos.x, pos.y, size, hex, highlight);
+    }
   }
 };
 
 MapDraw.drawHex = function (ctx, x, y, size, hex, highlight) {
+  const st = MapDraw.styleFor(hex, size);
+  MapDraw.paintHex(ctx, x, y, size, st, highlight);
+};
+
+MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
+  // smoothstep
+  const s = t * t * (3 - 2 * t);
+  const fill = MapDraw.lerpColor(from.fill, to.fill, s);
+  const stroke = MapDraw.lerpColor(from.stroke, to.stroke, s);
+  const lineW = from.lineW + (to.lineW - from.lineW) * s;
+  MapDraw.paintHex(ctx, x, y, size, { fill: fill, stroke: stroke, lineW: lineW }, highlight);
+};
+
+MapDraw.paintHex = function (ctx, x, y, size, style, highlight) {
   MapDraw.hexPath(ctx, x, y, size * 0.9);
-  let fill = "#1a3a1a";
-  let stroke = "#4a7a4a";
-  let lineW = Math.max(1.5, size * 0.08);
-  if (hex.stage === STAGE_YELLOW) {
-    fill = "#1a3a1a";
-    stroke = "#f2e27a";
-    lineW = Math.max(2, size * 0.12);
-  } else if (hex.stage === STAGE_RED_OUTLINE) {
-    fill = "#1a3a1a";
-    stroke = "#f7a227";
-    lineW = Math.max(2, size * 0.12);
-  } else if (hex.stage === STAGE_INFECTED) {
-    const pieces = hex.plan && hex.plan.stamps ? hex.plan.stamps.length : 4;
-    const t = Math.max(0, Math.min(1, (pieces - 4) / 5));
-    const r = 110 + t * 90;
-    const g = 28 + t * 18;
-    const b = 28;
-    fill = "rgb(" + (r|0) + "," + (g|0) + "," + b + ")";
-    stroke = "#e15a52";
-    lineW = Math.max(1.5, size * 0.08);
-  }
-  ctx.fillStyle = fill;
+  ctx.fillStyle = "rgb(" + style.fill[0] + "," + style.fill[1] + "," + style.fill[2] + ")";
   ctx.fill();
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = lineW;
+  ctx.strokeStyle = "rgb(" + style.stroke[0] + "," + style.stroke[1] + "," + style.stroke[2] + ")";
+  ctx.lineWidth = style.lineW;
   ctx.stroke();
   if (highlight) {
     ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = lineW + 1;
+    ctx.lineWidth = style.lineW + 1;
     ctx.stroke();
   }
 };
