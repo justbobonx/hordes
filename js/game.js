@@ -245,7 +245,15 @@ Game.prototype.enterMode = function (mode, isNew) {
   this.isTutorial = false;
   if (mode === "campaign") {
     if (!this.country) this.finishIntro();
-    else this.setMode("map");
+    else {
+      const board = Save.readBoard("campaign");
+      if (board && board.cells && this.activeHexKey) {
+        this.setMode("level");
+        this.restore(board);
+      } else {
+        this.setMode("map");
+      }
+    }
   } else {
     const board = Save.readBoard("endless");
     if (board && board.cells) {

@@ -315,7 +315,7 @@ Ui.prototype.renderModeRows = function () {
     if (self.expandedMode === mode && hasSave) {
       const cont = document.createElement("button");
       cont.type = "button";
-      cont.className = "btn-title";
+      cont.className = "btn-title btn-continue";
       cont.textContent = "Continue";
       cont.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -323,7 +323,7 @@ Ui.prototype.renderModeRows = function () {
       });
       const neu = document.createElement("button");
       neu.type = "button";
-      neu.className = "btn-title";
+      neu.className = "btn-title btn-new";
       neu.textContent = "New";
       neu.addEventListener("click", function (e) {
         e.stopPropagation();
