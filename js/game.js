@@ -708,6 +708,7 @@ Game.prototype.onDown = function (e) {
   const rect = this.ui.canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
+  const inTray = y<this.trayH; 
   const trayHit = this.hitTray(x, y);
   const onGhost = this.preview && this.pointOnPreview(x, y);
   this.hold = {
@@ -724,7 +725,11 @@ Game.prototype.onDown = function (e) {
   };
   if (trayHit) {
     this.selectedQ = trayHit.index;
-  } else if (!this.preview && this.queue.length) {
+  }else if( inTray ) {
+    //in tray but no piece
+    return;
+  }
+  else if (!this.preview && this.queue.length) {
     this.setSelected(0);
     const fp0 = this.pieceById(this.queue[0]); const aim = fp0 ? this.aimAt(x, y, fp0.kind, e) : null;
     if (aim) {
@@ -784,6 +789,8 @@ Game.prototype.onMove = function (e) {
 Game.prototype.onUp = function (e) {
   if (!this.hold || e.pointerId !== this.hold.id) return;
   const dt = Date.now() - this.hold.t0;
+  const rect = this.ui.canvas.getBoundingClientRect();
+  const y = e.clientY - rect.top;
   const trayIndex = this.hold.trayIndex;
   const placed = this.hold.placed;
   const justStarted = !!this.hold.justStarted;
@@ -793,6 +800,9 @@ Game.prototype.onUp = function (e) {
     this.preview = null;
     this.selectedQ = trayIndex;
     this.setSelected(trayIndex);
+    return;
+  }
+  if( y<this.trayH ) {
     return;
   }
   // Aim-start gesture must not also count as the drop click
