@@ -12,17 +12,43 @@ function Grid(rows, cols) {
   }
 }
 
+// Grid.STAMP_DEFINITIONS = {
+  // "33": { w: 3, h: 3, p: 2, minlevel: 1, trayColor:"#c45a12" },  // dark orange
+  // "35": { w: 3, h: 5, p: 3, minlevel: 4, trayColor:"#e06a14" },  // solid orange
+  // "53": { w: 5, h: 3, p: 3, minlevel: 4, trayColor:"#d9781a" },  // solid orange, lower sat
+  // "24": { w: 2, h: 4, p: 3, minlevel: 5, trayColor:"#e87218" },  // solid orange
+  // "42": { w: 4, h: 2, p: 3, minlevel: 5, trayColor:"#d88022" },  // solid orange, lower sat
+  // "45": { w: 4, h: 5, p: 2, minlevel: 7, trayColor:"#f08a3a" },  // light orange
+  // "54": { w: 5, h: 4, p: 2, minlevel: 7, trayColor:"#e09848" },  // light orange, lower sat
+  // "15": { w: 1, h: 5, p: 1, minlevel: 8, trayColor:"#e8b020" },  // yellow
+  // "51": { w: 5, h: 1, p: 1, minlevel: 8, trayColor:"#d4a42c" },  // yellow, lower sat
+  // "22": { w: 2, h: 2, p: 1, minlevel: 8, trayColor:"#8c3c14" }   // rusty
+// };
+
+// Grid.STAMP_DEFINITIONS = {
+  // "33": { w: 3, h: 3, p: 2, minlevel: 1, trayColor:"#c45e14" },
+  // "35": { w: 3, h: 5, p: 3, minlevel: 4, trayColor:"#e07020" },
+  // "53": { w: 5, h: 3, p: 3, minlevel: 4, trayColor:"#d88828" },
+  // "24": { w: 2, h: 4, p: 3, minlevel: 5, trayColor:"#e05810" },
+  // "42": { w: 4, h: 2, p: 3, minlevel: 5, trayColor:"#cc7024" },
+  // "45": { w: 4, h: 5, p: 2, minlevel: 7, trayColor:"#f09040" },
+  // "54": { w: 5, h: 4, p: 2, minlevel: 7, trayColor:"#e0a050" },
+  // "15": { w: 1, h: 5, p: 1, minlevel: 8, trayColor:"#e8a018" },
+  // "51": { w: 5, h: 1, p: 1, minlevel: 8, trayColor:"#d49830" },
+  // "22": { w: 2, h: 2, p: 1, minlevel: 8, trayColor:"#a04818" }
+// };
+
 Grid.STAMP_DEFINITIONS = {
-  "33": { w: 3, h: 3, p: 2, minlevel: 1 },
-  "35": { w: 3, h: 5, p: 3, minlevel: 4 },
-  "53": { w: 5, h: 3, p: 3, minlevel: 4 },
-  "24": { w: 2, h: 4, p: 3, minlevel: 5 },
-  "42": { w: 4, h: 2, p: 3, minlevel: 5 },
-  "45": { w: 4, h: 5, p: 2, minlevel: 7 },
-  "54": { w: 5, h: 4, p: 2, minlevel: 7 },
-  "15": { w: 1, h: 5, p: 1, minlevel: 8 },
-  "51": { w: 5, h: 1, p: 1, minlevel: 8 },
-  "22": { w: 2, h: 2, p: 1, minlevel: 8 }
+  "33": { w: 3, h: 3, p: 2, minlevel: 1, trayColor:"#c25210" },
+  "35": { w: 3, h: 5, p: 3, minlevel: 4, trayColor:"#e06814" },
+  "53": { w: 5, h: 3, p: 3, minlevel: 4, trayColor:"#d49030" },
+  "24": { w: 2, h: 4, p: 3, minlevel: 5, trayColor:"#e04c0c" },
+  "42": { w: 4, h: 2, p: 3, minlevel: 5, trayColor:"#c87828" },
+  "45": { w: 4, h: 5, p: 2, minlevel: 7, trayColor:"#f49838" },
+  "54": { w: 5, h: 4, p: 2, minlevel: 7, trayColor:"#e0a858" },
+  "15": { w: 1, h: 5, p: 1, minlevel: 8, trayColor:"#f0a810" },
+  "51": { w: 5, h: 1, p: 1, minlevel: 8, trayColor:"#d4a038" },
+  "22": { w: 2, h: 2, p: 1, minlevel: 8, trayColor:"#b34718" }
 };
 
 Grid.prototype.at = function (r, c) {

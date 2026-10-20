@@ -121,12 +121,12 @@ Game.prototype.drawTray = function (ctx) {
   const selected = this.selectedQ != null ? this.selectedQ : (this.preview ? this.preview.qIndex : 0);
   for (let i = 0; i < stamps.length; i++) {
     const s = stamps[i];
+    const shape = Grid.STAMP_DEFINITIONS[s.kind];
     const live = s.index === selected;
     ctx.fillStyle = "#1c2418";
     ctx.fillRect(s.x - 2, s.y - 2, s.w + 4, s.h + 4);
-    ctx.fillStyle = "#e07a2f";
-    const cell = s.cell;
-    const shape = Grid.STAMP_DEFINITIONS[s.kind] || { w: 1, h: 1 };
+    ctx.fillStyle = shape.trayColor;
+    const cell = s.cell;    
     for (let r = 0; r < shape.h; r++) {
       for (let c = 0; c < shape.w; c++) {
         ctx.fillRect(s.x + c * cell + 1, s.y + r * cell + 1, cell - 2, cell - 2);
