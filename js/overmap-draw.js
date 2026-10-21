@@ -75,6 +75,12 @@ MapDraw.styleFor = function (hex, size) {
   if (!hex || hex.stage === STAGE_CLEAR) {
     return { fill: baseFill, stroke: baseStroke, lineW: baseLW };
   }
+  if (hex.stage === STAGE_JUST_CLEARED) {
+    return { fill: [210, 255, 210], stroke: [230, 255, 230], lineW: baseLW };
+  }
+  if (hex.stage === STAGE_SAFER || hex.stage === STAGE_SAFE) {
+    return { fill: [60, 150, 60], stroke: [90, 190, 90], lineW: baseLW };
+  }
   if (hex.stage === STAGE_YELLOW) {
     return { fill: baseFill, stroke: [242, 226, 122], lineW: thickLW };
   }
@@ -94,7 +100,14 @@ MapDraw.captureStyles = function (country, size) {
   const styles = {};
   const keys = Object.keys(country.hexes);
   for (let i = 0; i < keys.length; i++) {
-    styles[keys[i]] = MapDraw.styleFor(country.hexes[keys[i]], size);
+    const hex = country.hexes[keys[i]];
+    const st = MapDraw.styleFor(hex, size);
+    st.stage = hex.stage;
+    // explicit visual scale at capture time so later stage changes cannot confuse the shrink
+    if (hex.stage === STAGE_SAFE) st.scale = 0.4;
+    else if (hex.stage === STAGE_SAFER || hex.stage === STAGE_JUST_CLEARED) st.scale = 0.9;
+    else st.scale = 0.9;
+    styles[keys[i]] = st;
   }
   return styles;
 };
@@ -124,6 +137,7 @@ MapDraw.render = function (ctx, country, layout, highlightKey, fade) {
     if (oldStyles && oldStyles[keys[i]] && t < 1) {
       const from = oldStyles[keys[i]];
       const to = MapDraw.styleFor(hex, size);
+      to.stage = hex.stage;
       MapDraw.drawHexLerp(ctx, pos.x, pos.y, size, from, to, t, highlight);
     } else {
       MapDraw.drawHex(ctx, pos.x, pos.y, size, hex, highlight);
@@ -132,13 +146,44 @@ MapDraw.render = function (ctx, country, layout, highlightKey, fade) {
 };
 
 MapDraw.drawHex = function (ctx, x, y, size, hex, highlight) {
+  if (hex && hex.stage === STAGE_SAFE) {
+    const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
+    MapDraw.paintHex(ctx, x, y, size, base, false);
+    const med = { fill: [60, 150, 60], stroke: [90, 190, 90], lineW: Math.max(1, size * 0.05) };
+    MapDraw.paintHexAt(ctx, x, y, size * 0.4, med, highlight);
+    return;
+  }
   const st = MapDraw.styleFor(hex, size);
   MapDraw.paintHex(ctx, x, y, size, st, highlight);
 };
 
 MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
-  // smoothstep
-  const s = t * t * (3 - 2 * t);
+  const s = t * t * (3 - 2 * t); // smoothstep
+  const fromStage = from.stage;
+  const toStage = to.stage;
+  const fromScale = from.scale != null ? from.scale : 0.9;
+  const medFill = [60, 150, 60];
+  const med = { fill: medFill, stroke: [90, 190, 90], lineW: Math.max(1, size * 0.05) };
+
+  // SAFER (full) → SAFE (inset): shrink from 0.9 to 0.4
+  if (fromScale > 0.5 && toStage === STAGE_SAFE) {
+    const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
+    MapDraw.paintHex(ctx, x, y, size, base, false);
+    const pathSize = size * (0.9 + (0.4 - 0.9) * s);
+    MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
+    return;
+  }
+
+  // SAFE (inset) → CLEAR: shrink from 0.4 to 0
+  if (fromScale <= 0.5 && toStage === STAGE_CLEAR) {
+    const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
+    MapDraw.paintHex(ctx, x, y, size, base, false);
+    const pathSize = size * fromScale * (1 - s);
+    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
+    return;
+  }
+
+  // default color lerp
   const fill = MapDraw.lerpColor(from.fill, to.fill, s);
   const stroke = MapDraw.lerpColor(from.stroke, to.stroke, s);
   const lineW = from.lineW + (to.lineW - from.lineW) * s;
@@ -146,7 +191,12 @@ MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
 };
 
 MapDraw.paintHex = function (ctx, x, y, size, style, highlight) {
-  MapDraw.hexPath(ctx, x, y, size * 0.9);
+  MapDraw.paintHexAt(ctx, x, y, size * 0.9, style, highlight);
+};
+
+MapDraw.paintHexAt = function (ctx, x, y, pathSize, style, highlight) {
+  if (pathSize <= 0) return;
+  MapDraw.hexPath(ctx, x, y, pathSize);
   ctx.fillStyle = "rgb(" + style.fill[0] + "," + style.fill[1] + "," + style.fill[2] + ")";
   ctx.fill();
   ctx.strokeStyle = "rgb(" + style.stroke[0] + "," + style.stroke[1] + "," + style.stroke[2] + ")";

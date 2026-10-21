@@ -263,6 +263,25 @@ Overmap.generate = function (seed, targetCount, startWave) {
 
 Overmap.cool = function (country) {
   const keys = Object.keys(country.hexes);
+  // SAFER radiates: lower non-infected positive stages on neighbors
+  for (let i = 0; i < keys.length; i++) {
+    const h = country.hexes[keys[i]];
+    if (h.stage !== STAGE_SAFER) continue;
+    const neigh = Overmap.neighbors(h.q, h.r);
+    for (let j = 0; j < neigh.length; j++) {
+      const nk = Overmap.key(neigh[j].q, neigh[j].r);
+      const nh = country.hexes[nk];
+      if (nh && nh.stage > STAGE_CLEAR && nh.stage < STAGE_INFECTED) {
+        nh.stage -= 1;
+      }
+    }
+  }
+  // decay negatives: JUST_CLEARED -> SAFER, SAFER -> SAFE, SAFE -> CLEAR
+  for (let i = 0; i < keys.length; i++) {
+    const h = country.hexes[keys[i]];
+    if (h.stage < 0) h.stage += 1;
+  }
+  // existing yellow/red cool if isolated from infected
   for (let i = 0; i < keys.length; i++) {
     const h = country.hexes[keys[i]];
     if (h.stage === STAGE_YELLOW || h.stage === STAGE_RED_OUTLINE) {
@@ -278,7 +297,7 @@ Overmap.cool = function (country) {
 Overmap.clearInfected = function (country, key) {
   const h = country.hexes[key];
   if (!h || h.stage !== STAGE_INFECTED) return;
-  h.stage = STAGE_CLEAR;
+  h.stage = STAGE_JUST_CLEARED;
   h.plan = null;
   h.wave = 0;   
 };
@@ -288,7 +307,7 @@ Overmap.advance = function (country) {
   const toAdvance = [];
   for (let i = 0; i < keys.length; i++) {
     const h = country.hexes[keys[i]];
-    if (h.stage >= STAGE_INFECTED) continue;
+    if (h.stage >= STAGE_INFECTED || h.stage < 0) continue;
     const n = Overmap.infectedNeighborCount(country, keys[i]);
 
     let p;
