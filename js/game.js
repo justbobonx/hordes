@@ -56,6 +56,7 @@ function Game() {
   this.mapTicking = false;
   this.fade = null;
   this.activeHexKey = null;
+  this.lastHexKey = null;
   this.mapBound = false;
   this.global = Save.readGlobal();
   this.isTutorial = false;
@@ -224,6 +225,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.hintCount = 0;
     this.undoCount = 0;
     this.activeHexKey = null;
+    this.lastHexKey = null;
     this.country = null;
   } else {
     const run = Save.readRun(mode) || {};
@@ -236,6 +238,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.tries = run.tries | 0;
     this.totalTime = run.totalTime | 0;
     this.activeHexKey = run.activeHexKey || null;
+    this.lastHexKey = run.lastHexKey || null;
     if (mode === "campaign") this.country = Save.readCountry();
   }
   if (!this.global.introDone) {
@@ -251,6 +254,7 @@ Game.prototype.enterMode = function (mode, isNew) {
         this.setMode("level");
         this.restore(board);
       } else {
+        this.activeHexKey = null;
         this.setMode("map");
       }
     }
@@ -289,6 +293,8 @@ Game.prototype.startTutorial = function () {
 Game.prototype.onPlanBack = function () {
   this.ui.hidePlan();
   if (this.gameMode === "campaign" && this.country) {
+    // Keep the backed-out hex outlined so the player sees what they had picked.
+    this.lastHexKey = this.activeHexKey;
     this.activeHexKey = null;
     this.setMode("map");
   } else {
@@ -322,6 +328,7 @@ Game.prototype.startOver = function () {
   this.isTutorial = false;
   this.global = Save.readGlobal();
   this.activeHexKey = null;
+  this.lastHexKey = null;
   this.mapTicking = false;
   this.clearHold();
   this.preview = null;
@@ -345,6 +352,7 @@ Game.prototype.resetMapAfterIntro = function () {
   this.storyAfter = null;
   this.country = null;
   this.activeHexKey = null;
+  this.lastHexKey = null;
   this.clearHold();
   this.preview = null;
   this.ui.hidePlan();
@@ -439,6 +447,11 @@ Game.prototype.afterStory = function (after) {
 
 Game.prototype.onPlan = function (card) {
   this.ui.hidePlan();
+  // Campaign card shown over the map: play the selected hex.
+  if (this.mode === "map" && this.activeHexKey) {
+    this.enterHexLevel(this.activeHexKey);
+    return;
+  }
   this.plan = Plan.copy(card.plan);
   this.beginWave(this.plan);
 };
@@ -1055,6 +1068,7 @@ Game.prototype.persistRun = function () {
     hintCount: this.hintCount | 0,
     undoCount: this.undoCount | 0,
     activeHexKey: this.activeHexKey || null,
+    lastHexKey: this.lastHexKey || null,
     tries: this.tries | 0,
     totalTime: this.totalTime | 0,
   });
@@ -1163,7 +1177,7 @@ Game.prototype.drawMap = function () {
       this.fade = null;
     }
   }
-  MapDraw.render(this.mapCtx, this.country, this.mapLayout, this.activeHexKey, fade);
+  MapDraw.render(this.mapCtx, this.country, this.mapLayout, this.activeHexKey || this.lastHexKey, fade);
 };
 
 Game.prototype.startMapFade = function (oldStyles) {
@@ -1177,31 +1191,33 @@ Game.prototype.startMapFade = function (oldStyles) {
   requestAnimationFrame(frame);
 };
 
+// Select on release, not press: opening the card on pointerdown let the touch
+// click that follows land on the card (GO/Back). Down only records the hex.
 Game.prototype.onMapDown = function (e) {
-  if (this.mode !== "map" || !this.country || this.mapTicking) return;
+  this.mapPress = null;
+  if (this.mode !== "map" || !this.country || this.mapTicking || this.ui.planOpen()) return;
   e.preventDefault();
   const rect = this.mapCanvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const key = MapDraw.hit(this.mapLayout, x, y);
-  if (!key) return;
-  const hex = this.country.hexes[key];
-  if (!hex || hex.stage !== STAGE_INFECTED || !hex.plan) return;
-  this.activeHexKey = key;
-  this.ui.hideStart();
-  this.setMode("plan");
-  this.ui.paintPlans([{ plan: hex.plan, locked: false }]);
-  this.ui.showPlan();
-  const self = this;
-  const orig = this.ui.onPlanPick;
-  this.ui.onPlanPick = function (card) {
-    self.ui.onPlanPick = orig;
-    self.ui.hidePlan();
-    self.enterHexLevel(key);
-  };
+  const key = MapDraw.hit(this.mapLayout, e.clientX - rect.left, e.clientY - rect.top);
+  if (key) this.mapPress = { id: e.pointerId, key: key };
 };
 
-Game.prototype.onMapUp = function (e) {};
+Game.prototype.onMapUp = function (e) {
+  const press = this.mapPress;
+  this.mapPress = null;
+  if (!press || press.id !== e.pointerId) return;
+  if (this.mode !== "map" || !this.country || this.mapTicking || this.ui.planOpen()) return;
+  const rect = this.mapCanvas.getBoundingClientRect();
+  const key = MapDraw.hit(this.mapLayout, e.clientX - rect.left, e.clientY - rect.top);
+  if (key !== press.key) return;
+  const hex = this.country.hexes[key];
+  if (!hex || hex.stage !== STAGE_INFECTED || !hex.plan) return;
+  // Stay in map mode: the card opens over the live map and the hex stays outlined.
+  this.activeHexKey = key;
+  this.ui.hideStart();
+  this.ui.paintPlans([{ plan: hex.plan, locked: false }]);
+  this.ui.showPlan(true);
+};
 
 Game.prototype.enterHexLevel = function (key) {
   const hex = this.country.hexes[key];
@@ -1248,6 +1264,8 @@ Game.prototype.onLevelExit = function (reason) {
   this.tries = (this.tries | 0) + 1;
   this.totalTime = (this.totalTime | 0) + this.elapsedMs;
   this.activeHexKey = null;
+  // Quit leaves the hex outlined; a win is already marked by JUST_CLEARED.
+  this.lastHexKey = reason === "quit" ? key : null;
   this.persistRun();
   Save.clearBoard("campaign");
   this.grid = null;

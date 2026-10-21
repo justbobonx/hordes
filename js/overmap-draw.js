@@ -133,31 +133,39 @@ MapDraw.render = function (ctx, country, layout, highlightKey, fade) {
   for (let i = 0; i < keys.length; i++) {
     const pos = layout.positions[keys[i]];
     const hex = country.hexes[keys[i]];
-    const highlight = keys[i] === highlightKey;
     if (oldStyles && oldStyles[keys[i]] && t < 1) {
       const from = oldStyles[keys[i]];
       const to = MapDraw.styleFor(hex, size);
       to.stage = hex.stage;
-      MapDraw.drawHexLerp(ctx, pos.x, pos.y, size, from, to, t, highlight);
+      MapDraw.drawHexLerp(ctx, pos.x, pos.y, size, from, to, t);
     } else {
-      MapDraw.drawHex(ctx, pos.x, pos.y, size, hex, highlight);
+      MapDraw.drawHex(ctx, pos.x, pos.y, size, hex);
     }
+  }
+  // Selection: second pass so neighbors never paint over it. Weak outline just
+  // inside the 0.9 body so the hex's own border still reads.
+  const sel = highlightKey && layout.positions[highlightKey];
+  if (sel) {
+    MapDraw.hexPath(ctx, sel.x, sel.y, size * 0.75);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+    ctx.lineWidth = Math.max(1, size * 0.04);
+    ctx.stroke();
   }
 };
 
-MapDraw.drawHex = function (ctx, x, y, size, hex, highlight) {
+MapDraw.drawHex = function (ctx, x, y, size, hex) {
   if (hex && hex.stage === STAGE_SAFE) {
     const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
-    MapDraw.paintHex(ctx, x, y, size, base, false);
+    MapDraw.paintHex(ctx, x, y, size, base);
     const med = { fill: [60, 150, 60], stroke: [90, 190, 90], lineW: Math.max(1, size * 0.05) };
-    MapDraw.paintHexAt(ctx, x, y, size * 0.4, med, highlight);
+    MapDraw.paintHexAt(ctx, x, y, size * 0.4, med);
     return;
   }
   const st = MapDraw.styleFor(hex, size);
-  MapDraw.paintHex(ctx, x, y, size, st, highlight);
+  MapDraw.paintHex(ctx, x, y, size, st);
 };
 
-MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
+MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t) {
   const s = t * t * (3 - 2 * t); // smoothstep
   const fromScale = from.scale != null ? from.scale : 0.9;
   const toStage = to.stage;
@@ -167,17 +175,17 @@ MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
 
   // SAFER (full) → SAFE (inset): shrink 0.9 → 0.4
   if (fromScale > 0.5 && toStage === STAGE_SAFE) {
-    MapDraw.paintHex(ctx, x, y, size, base, false);
+    MapDraw.paintHex(ctx, x, y, size, base);
     const pathSize = size * (0.9 + (0.4 - 0.9) * s);
-    MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
+    MapDraw.paintHexAt(ctx, x, y, pathSize, med);
     return;
   }
 
   // SAFE (inset) → CLEAR: shrink 0.4 → 0
   if (fromScale <= 0.5 && toStage === STAGE_CLEAR) {
-    MapDraw.paintHex(ctx, x, y, size, base, false);
+    MapDraw.paintHex(ctx, x, y, size, base);
     const pathSize = size * fromScale * (1 - s);
-    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
+    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med);
     return;
   }
 
@@ -185,9 +193,9 @@ MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
   // Paint the inset at the captured scale so the old state is correct at t = 0
   // and during any non-shrink transition.
   if (fromScale <= 0.5) {
-    MapDraw.paintHex(ctx, x, y, size, base, false);
+    MapDraw.paintHex(ctx, x, y, size, base);
     const pathSize = size * fromScale;
-    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
+    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med);
     // If you later need a color blend out of SAFE into a non-CLEAR target,
     // lerp the med color toward to.fill here and paint that instead of the
     // fixed med. For the current stages this is enough.
@@ -198,14 +206,14 @@ MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
   const fill = MapDraw.lerpColor(from.fill, to.fill, s);
   const stroke = MapDraw.lerpColor(from.stroke, to.stroke, s);
   const lineW = from.lineW + (to.lineW - from.lineW) * s;
-  MapDraw.paintHex(ctx, x, y, size, { fill: fill, stroke: stroke, lineW: lineW }, highlight);
+  MapDraw.paintHex(ctx, x, y, size, { fill: fill, stroke: stroke, lineW: lineW });
 };
 
-MapDraw.paintHex = function (ctx, x, y, size, style, highlight) {
-  MapDraw.paintHexAt(ctx, x, y, size * 0.9, style, highlight);
+MapDraw.paintHex = function (ctx, x, y, size, style) {
+  MapDraw.paintHexAt(ctx, x, y, size * 0.9, style);
 };
 
-MapDraw.paintHexAt = function (ctx, x, y, pathSize, style, highlight) {
+MapDraw.paintHexAt = function (ctx, x, y, pathSize, style) {
   if (pathSize <= 0) return;
   MapDraw.hexPath(ctx, x, y, pathSize);
   ctx.fillStyle = "rgb(" + style.fill[0] + "," + style.fill[1] + "," + style.fill[2] + ")";
@@ -213,11 +221,6 @@ MapDraw.paintHexAt = function (ctx, x, y, pathSize, style, highlight) {
   ctx.strokeStyle = "rgb(" + style.stroke[0] + "," + style.stroke[1] + "," + style.stroke[2] + ")";
   ctx.lineWidth = style.lineW;
   ctx.stroke();
-  if (highlight) {
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = style.lineW + 1;
-    ctx.stroke();
-  }
 };
 
 MapDraw.hit = function (layout, x, y) {

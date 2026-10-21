@@ -121,6 +121,8 @@ button:disabled {
 
 .overlay[hidden] { display: none; }
 
+.plan-overlay.over-map { background: rgba(12, 16, 10, 0.35); }
+
 .start-panel, .panel, .story-card, .plan-card {
   cursor: pointer;
   width: min(420px, 100%);

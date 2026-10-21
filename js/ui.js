@@ -63,8 +63,12 @@ Ui.prototype.showStart = function () {
   if (this.elStart) this.elStart.hidden = false;
 };
 
-Ui.prototype.showPlan = function () {
-  if (this.elPlan) this.elPlan.hidden = false;
+// overMap: campaign card floats over the live map instead of its own backdrop.
+Ui.prototype.showPlan = function (overMap) {
+  if (!this.elPlan) return;
+  this.elPlan.classList.toggle("over-map", !!overMap);
+  this.planShownAt = performance.now();
+  this.elPlan.hidden = false;
 };
 
 Ui.prototype.hidePlan = function () {
@@ -265,6 +269,18 @@ Ui.prototype.bind = function (handlers) {
   on(this.btnReset, "click", handlers.reset);
 
   const self = this;
+  if (this.elPlan) {
+    // Swallow the late synthetic click from the tap that opened the card.
+    this.elPlan.addEventListener("click", function (e) {
+      if (performance.now() - (self.planShownAt || 0) >= 250) return;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
+    // Card clicks stop propagation, so this only sees the backdrop. Over the map it means Back.
+    this.elPlan.addEventListener("click", function () {
+      if (self.elPlan.classList.contains("over-map") && self.onPlanBack) self.onPlanBack();
+    });
+  }
   document.addEventListener("click", function (e) {
     if (!self.startOpen() || !self.expandedMode) return;
     const panel = self.elStart && self.elStart.querySelector(".start-panel");
