@@ -5,6 +5,9 @@ const AXIAL_NEIGHBORS = [
   [-1, 0], [-1, 1], [0, 1]
 ];
 
+const STAGE_JUST_CLEARED = -3;
+const STAGE_SAFER = -2;
+const STAGE_SAFE = -1;
 const STAGE_CLEAR = 0;
 const STAGE_YELLOW = 1;
 const STAGE_RED_OUTLINE = 2;
