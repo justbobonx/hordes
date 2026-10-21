@@ -5,7 +5,7 @@
 const USE_SPRITES = false;
 
 // Extra inset growth per hit taken (fraction of cell size).
-const STRENGTH_INSET_GROW = 0.045;
+const STRENGTH_INSET_GROW = 0.05;
 
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
@@ -142,7 +142,7 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
       Math.min(this.round[2] ? rad : 0, maxR),
       Math.min(this.round[3] ? rad : 0, maxR),
     ];
-    fillRounded(ctx, bix, biy, bis, corners, CELL_TYPES.cleared.fill);
+    fillRounded(ctx, bix, biy, bis, corners, CELL_TYPES.scorched.fill);
   }
 
   const ix = x + inset;

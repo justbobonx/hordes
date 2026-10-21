@@ -13,8 +13,10 @@ const STAGE_INFECTED = 3;
 const MIN_INFECTED_SEEDS = 6
 const MIN_NON_CLEAR_SEEDS = 11;
 
-const SPREAD_PROBS = [0, 0.05, 0.10, 0.40, 0.70, 0.90, 1.00];
-const YELLOW_PLUS = 0.4;
+//const SPREAD_PROBS = [0, 0.05, 0.10, 0.40, 0.70, 0.90, 1.00];
+const SPREAD_PROBS = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8];
+const YELLOW_PLUS = 0.2;
+const RED_PLUS = 0.4;
 
 function Overmap() {}
 
@@ -292,7 +294,7 @@ Overmap.advance = function (country) {
     } else if (h.stage === STAGE_YELLOW) {
       p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + YELLOW_PLUS);
     } else { // STAGE_RED_OUTLINE
-      p = 1;
+      p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + RED_PLUS);
     }
     if (Math.random() < p) toAdvance.push(keys[i]);
   }
