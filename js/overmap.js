@@ -17,7 +17,7 @@ const MIN_INFECTED_SEEDS = 6
 const MIN_NON_CLEAR_SEEDS = 11;
 
 //const SPREAD_PROBS = [0, 0.05, 0.10, 0.40, 0.70, 0.90, 1.00];
-const SPREAD_PROBS = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8];
+const SPREAD_PROBS = [0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8];
 const YELLOW_PLUS = 0.2;
 const RED_PLUS = 0.4;
 
