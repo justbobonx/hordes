@@ -96,7 +96,14 @@ Game.prototype.reachable = function (candidateCells, seeds, anchorRow, anchorCol
 Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol) {
   if (!cells || !cells.length || !seeds || !seeds.length) return null;
   const have = {};
-  for (let i = 0; i < cells.length; i++) have[cells[i].r + "," + cells[i].c] = cells[i];
+  // origin: per cell, the anchor of the piece that brought it into this wave.
+  // Drop cells orient off the stamp anchor; fuel-added cells off that fuel (builder rule).
+  const origin = {};
+  for (let i = 0; i < cells.length; i++) {
+    const key = cells[i].r + "," + cells[i].c;
+    have[key] = cells[i];
+    origin[key] = { r: anchorRow, c: anchorCol };
+  }
   const frontier = [];
   const seen = {};
   for (let i = 0; i < seeds.length; i++) {
@@ -115,8 +122,7 @@ Game.prototype.enqueueProp = function (cells, seeds, hint, anchorRow, anchorCol)
     landed: {},
     stopped: false,
     done: false,
-    anchorRow: anchorRow,
-    anchorCol: anchorCol,
+    origin: origin,
   };
   this.actions.push(action);
   return action;
@@ -138,19 +144,16 @@ Game.prototype.fuelCellsFrom = function (fuelR, fuelC, originR, originC) {
 
 Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   if (wasFuel) {
-    const extra = this.fuelCellsFrom(r, c, action.anchorRow, action.anchorCol);
-    if (extra.length) {
-      for (let i = 0; i < extra.length; i++) {
-        const cell = extra[i];
-        const key = cell.r + "," + cell.c;
-        if (action.have[key]) continue;
-        action.have[key] = cell;
-        action.cells.push(cell);
-      }
+    // Orient off the anchor of the piece that activated this fuel, same as the builder chain.
+    const activator = action.origin[r + "," + c];
+    const extra = this.fuelCellsFrom(r, c, activator.r, activator.c);
+    for (let i = 0; i < extra.length; i++) {
+      const key = extra[i].r + "," + extra[i].c;
+      if (action.have[key]) continue;
+      action.have[key] = extra[i];
+      action.origin[key] = { r: r, c: c };
+      action.cells.push(extra[i]);
     }
-    // Next fuel in this wave orients off this fuel, same as the builder chain.
-    action.anchorRow = r;
-    action.anchorCol = c;
   }
   return null;
 };
