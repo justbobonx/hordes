@@ -375,17 +375,10 @@ Game.prototype.openPlan = function () {
   if (this.testPlan) {
     cards = [{ plan: this.testPlan, locked: false, isTutorial: false }];
   } else if (this.isTutorial) {
-    const scripted = Planner.INTRO[this.wave];
-    if (scripted) {
+    const introPlan = Planner.intro(this.wave);
+    if (introPlan) {
       cards = [{
-        plan: Plan.copy({
-          wave: this.wave,
-          fuelChance: 0,
-          overlap: 0,
-          stronger: 0,
-          area: 1,
-          ...scripted
-        }),
+        plan: introPlan,
         locked: false,
         isTutorial: true
       }];
@@ -1334,6 +1327,7 @@ Game.prototype.updateMapHud = function () {
   const elStatus = document.getElementById("map-status");
   if (elStatus) elStatus.textContent = this.country.status || "";
 };
+
 
 
 

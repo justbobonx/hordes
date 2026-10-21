@@ -17,10 +17,23 @@ Planner.INTRO = {
   6: { cols: 9, rows: 10, stamps: ["45", "51", "24"], open: "inner", centered: 0.3, tight:0.7, thin: .5 },
 };
 
+Planner.intro = function (step) {
+  const scripted = Planner.INTRO[step];
+  if (!scripted) return null;
+  return Plan.copy({
+    wave: step,
+    fuelChance: 0,
+    overlap: 0,
+    stronger: 0,
+    area: 1,
+    ...scripted
+  });
+};
+
 Planner.offer = function (wave) {
   const w = wave > 0 ? wave : 1;
-  //piece count per wave size from calculated base plus rando range
-  // 1-8   | 4 | 2–4 |
+  // piece count per wave: base plus random downward range
+  // 1-8   | 4 | 3–4 |
   // 9–12  | 5 | 3–5 |
   // 13–17 | 6 | 4–6 |
   // 18-23 | 7 | 5–7 |
@@ -34,7 +47,7 @@ Planner.offer = function (wave) {
     base++;
     hold = base - 1;
   }
-  let sub = base <= 7 ? 2 : base - 5;
+  let sub = base === 4 ? 1 : (base <= 7 ? 2 : base - 5);
   let count = base + (((Math.random() * (sub + 1)) | 0) - sub);
   if (count < 1) count = 1;
   
@@ -42,7 +55,6 @@ Planner.offer = function (wave) {
   const ids = Object.keys(Grid.STAMP_DEFINITIONS);
   for (let i = 0; i < ids.length; i++) {
     const piece = Grid.STAMP_DEFINITIONS[ids[i]];
-    if (piece.minlevel > w) continue;
     for (let k = 0; k < piece.p; k++) pool.push(ids[i]);
   }
   for (let i = pool.length - 1; i > 0; i--) {
