@@ -159,31 +159,42 @@ MapDraw.drawHex = function (ctx, x, y, size, hex, highlight) {
 
 MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t, highlight) {
   const s = t * t * (3 - 2 * t); // smoothstep
-  const fromStage = from.stage;
-  const toStage = to.stage;
   const fromScale = from.scale != null ? from.scale : 0.9;
+  const toStage = to.stage;
   const medFill = [60, 150, 60];
   const med = { fill: medFill, stroke: [90, 190, 90], lineW: Math.max(1, size * 0.05) };
+  const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
 
-  // SAFER (full) → SAFE (inset): shrink from 0.9 to 0.4
+  // SAFER (full) → SAFE (inset): shrink 0.9 → 0.4
   if (fromScale > 0.5 && toStage === STAGE_SAFE) {
-    const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
     MapDraw.paintHex(ctx, x, y, size, base, false);
     const pathSize = size * (0.9 + (0.4 - 0.9) * s);
     MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
     return;
   }
 
-  // SAFE (inset) → CLEAR: shrink from 0.4 to 0
+  // SAFE (inset) → CLEAR: shrink 0.4 → 0
   if (fromScale <= 0.5 && toStage === STAGE_CLEAR) {
-    const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
     MapDraw.paintHex(ctx, x, y, size, base, false);
     const pathSize = size * fromScale * (1 - s);
     if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
     return;
   }
 
-  // default color lerp
+  // Held or starting SAFE visual (scale ≤ 0.5) that is not shrinking to CLEAR.
+  // Paint the inset at the captured scale so the old state is correct at t = 0
+  // and during any non-shrink transition.
+  if (fromScale <= 0.5) {
+    MapDraw.paintHex(ctx, x, y, size, base, false);
+    const pathSize = size * fromScale;
+    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med, highlight);
+    // If you later need a color blend out of SAFE into a non-CLEAR target,
+    // lerp the med color toward to.fill here and paint that instead of the
+    // fixed med. For the current stages this is enough.
+    return;
+  }
+
+  // default color lerp (both sides full-size)
   const fill = MapDraw.lerpColor(from.fill, to.fill, s);
   const stroke = MapDraw.lerpColor(from.stroke, to.stroke, s);
   const lineW = from.lineW + (to.lineW - from.lineW) * s;
