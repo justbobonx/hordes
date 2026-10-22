@@ -13,6 +13,7 @@ function Ui() {
   this.btnCampaign = document.getElementById("btn-campaign");
   this.btnEndless = document.getElementById("btn-endless");
   this.btnHelp = document.getElementById("btn-help");
+  this.modeRowContinue = document.getElementById("mode-row-continue");
   this.modeRowCampaign = document.getElementById("mode-row-campaign");
   this.modeRowEndless = document.getElementById("mode-row-endless");
   if (!this.modeRowCampaign || !this.modeRowEndless) {
@@ -313,6 +314,9 @@ Ui.prototype.bind = function (handlers) {
 Ui.prototype.updateStartInfo = function (data) {
   if (!this.handlers) this.handlers = {};
   if (data) {
+    this.handlers.introDone = !!data.introDone;
+    this.handlers.resumeMode = data.resumeMode || null;
+    this.handlers.resumeLabel = data.resumeLabel || "";
     this.handlers.hasCampaignSave = !!data.hasCampaignSave;
     this.handlers.hasEndlessSave = !!data.hasEndlessSave;
     this.handlers.campaignInfo = data.campaignInfo || "";
@@ -372,6 +376,50 @@ Ui.prototype.renderModeRows = function () {
   }
   const infos = this.elStart ? this.elStart.querySelectorAll(".continue-info") : [];
   for (let i = 0; i < infos.length; i++) infos[i].remove();
+
+  // CONTINUE: one tap back into the last mode played.
+  const resume = this.modeRowContinue;
+  if (resume) {
+    resume.innerHTML = "";
+    resume.hidden = !handlers.resumeLabel;
+    if (handlers.resumeLabel) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-title btn-resume";
+      btn.textContent = "Continue";
+      const sub = document.createElement("span");
+      sub.className = "resume-sub";
+      sub.textContent = handlers.resumeLabel;
+      btn.appendChild(sub);
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (handlers.continueMode) handlers.continueMode(handlers.resumeMode);
+      });
+      resume.appendChild(btn);
+    }
+  }
+
+  // Until the tutorial is done there is no mode choice: one Start button.
+  if (!handlers.introDone) {
+    if (this.modeRowCampaign) {
+      this.modeRowCampaign.innerHTML = "";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-title";
+      btn.textContent = "Start";
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (handlers.continueMode) handlers.continueMode("campaign");
+      });
+      this.modeRowCampaign.appendChild(btn);
+    }
+    if (this.modeRowEndless) {
+      this.modeRowEndless.innerHTML = "";
+      this.modeRowEndless.hidden = true;
+    }
+    return;
+  }
+  if (this.modeRowEndless) this.modeRowEndless.hidden = false;
   fillRow(this.modeRowCampaign, "campaign", handlers.hasCampaignSave, handlers.campaignInfo);
   fillRow(this.modeRowEndless, "endless", handlers.hasEndlessSave, handlers.endlessInfo);
 };

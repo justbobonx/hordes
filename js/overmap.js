@@ -234,7 +234,7 @@ Overmap.generate = function (seed, targetCount, startWave) {
       time: 0,
       nextWave: nextWave,
       hexes: hexes,
-      wins: 0,
+      clears: 0,
       losses: 0,
       totalTime: 0,
       status: ""
@@ -363,7 +363,7 @@ Overmap.step = function (country) {
   const s = country.pending && country.pending.shift();
   if (s && s.type === "clear") {
     Overmap.clearInfected(country, s.key);
-    country.wins = (country.wins | 0) + 1;
+    country.clears = (country.clears | 0) + 1;
   } else if (s && s.type === "cool") {
     Overmap.cool(country);
   } else if (s && s.type === "advance") {
@@ -380,6 +380,10 @@ Overmap.busy = function (country) {
 Overmap.playable = function (country, key) {
   const h = country.hexes[key];
   return !!(h && h.stage === STAGE_INFECTED && h.plan);
+};
+
+Overmap.hexCount = function (country) {
+  return Object.keys(country.hexes).length;
 };
 
 Overmap.infectedCount = function (country) {

@@ -159,6 +159,8 @@ h1 {
   width: 100%;
 }
 
+.mode-row[hidden] { display: none; }
+
 .mode-row .btn-title {
   flex: 1;
   margin-top: 0;
@@ -171,6 +173,12 @@ h1 {
 .mode-row .btn-new {
   flex: 1;
   padding: 6px 8px;
+}
+
+.btn-resume .resume-sub {
+  display: block;
+  font-size: 0.8em;
+  color: #e8e475;
 }
 
 .continue-info {

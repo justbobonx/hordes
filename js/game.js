@@ -100,9 +100,11 @@ Game.prototype.bind = function () {
   this.bound = true;
   const self = this;
   this.ui.bind({
+    // Help plays the start story, then returns to the title.
     help: function () {
       self.chrome.enter();
-      self.onStart(true);
+      self.ui.hideStart();
+      self.openStory("start", "title");
     },
     planPick: function (card) {
       self.chrome.enter();
@@ -137,10 +139,6 @@ Game.prototype.bind = function () {
     startOver: function () {
       self.startOver();
     },
-    hasCampaignSave: !!(Save.readCountry() || Save.readRun("campaign") || Save.readBoard("campaign")),
-    hasEndlessSave: !!(Save.readRun("endless") || Save.readBoard("endless")),
-    campaignInfo: self.campaignInfo(),
-    endlessInfo: self.endlessInfo(),
   });
   const canvas = this.ui.canvas;
   canvas.addEventListener("pointerdown", function (e) {
@@ -178,14 +176,30 @@ Game.prototype.endlessInfo = function () {
   return "WAVE " + (run.wave || 1);
 };
 
+// Title state. Before the tutorial is done the title is just Start + Help.
+// After it, CONTINUE resumes the last mode played if that mode still has a save.
 Game.prototype.refreshStart = function () {
-  const data = {
-    hasCampaignSave: !!(Save.readCountry() || Save.readRun("campaign") || Save.readBoard("campaign")),
-    hasEndlessSave: !!(Save.readRun("endless") || Save.readBoard("endless")),
+  const hasCampaignSave = !!(Save.readCountry() || Save.readRun("campaign") || Save.readBoard("campaign"));
+  const hasEndlessSave = !!(Save.readRun("endless") || Save.readBoard("endless"));
+  const introDone = !!this.global.introDone;
+  const last = this.global.lastMode;
+  let resumeLabel = "";
+  if (introDone && last === "campaign" && hasCampaignSave) {
+    const country = Save.readCountry();
+    resumeLabel = "Campaign - Day " + (country ? (country.time | 0) : 0);
+  } else if (introDone && last === "endless" && hasEndlessSave) {
+    const run = Save.readRun("endless");
+    resumeLabel = "Endless - Wave " + ((run && run.wave) || 1);
+  }
+  this.ui.updateStartInfo({
+    introDone: introDone,
+    hasCampaignSave: hasCampaignSave,
+    hasEndlessSave: hasEndlessSave,
     campaignInfo: this.campaignInfo(),
     endlessInfo: this.endlessInfo(),
-  };
-  this.ui.updateStartInfo(data);
+    resumeMode: resumeLabel ? last : null,
+    resumeLabel: resumeLabel,
+  });
 };
 
 Game.prototype.returnToStart = function () {
@@ -206,6 +220,8 @@ Game.prototype.returnToStart = function () {
 
 Game.prototype.enterMode = function (mode, isNew) {
   this.gameMode = mode;
+  this.global.lastMode = mode;
+  Save.writeGlobal(this.global);
   this.ui.hideStart();
   if (isNew) {
     Save.clearBoard(mode);
@@ -352,22 +368,6 @@ Game.prototype.resetMapAfterIntro = function () {
   this.ui.hideStart();
   // leave introDone / seen.start so story stays skipped
   this.finishIntro();
-};
-
-Game.prototype.onStart = function (help) {
-  this.ui.hideStart();
-  this.ui.hidePlan();
-  if (this.country) {
-    this.setMode("map");
-    return;
-  }
-  if (help || !this.seen.start) {
-    this.seen.start = true;
-    this.persistRun();
-    this.openStory("start", help ? "title" : "plan");
-    return;
-  }
-  this.openPlan();
 };
 
 Game.prototype.openPlan = function () {
@@ -1239,12 +1239,12 @@ Game.prototype.updateMapHud = function () {
   if (!this.country) return;
   const elI = document.getElementById("map-infected");
   const elT = document.getElementById("map-time");
-  const elW = document.getElementById("map-wins");
+  const elC = document.getElementById("map-clears");
   const elTries = document.getElementById("map-tries");
   const elTime = document.getElementById("map-total-time");
-  if (elI) elI.textContent = "INFECTED " + Overmap.infectedCount(this.country);
+  if (elI) elI.textContent = "INFECTED " + Overmap.infectedCount(this.country) + "/" + Overmap.hexCount(this.country);
   if (elT) elT.textContent = "DAY " + (this.country.time | 0);
-  if (elW) elW.textContent = "WINS " + (this.country.wins | 0);
+  if (elC) elC.textContent = "CLEARS " + (this.country.clears | 0);
   if (elTries) elTries.textContent = "TRIES " + (this.tries | 0);
   if (elTime) elTime.textContent = "TIME " + this.formatTime(this.totalTime | 0);
   const elStatus = document.getElementById("map-status");
