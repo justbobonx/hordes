@@ -339,6 +339,62 @@ Overmap.advance = function (country) {
 };
 
 
+// New campaign country with the standard size and starting wave.
+Overmap.create = function (seed) {
+  return Overmap.generate(seed, 32, 1);
+};
+
+// Queue everything that happens on the map after a level: the clear on a
+// win, then a cool and an advance per day. Days grow with resets, hints and
+// undos. Steps play one at a time via Overmap.step and persist with the
+// country, so an interrupted run resumes.
+Overmap.endLevel = function (country, key, won, stats) {
+  const days = 1 + (stats.resets | 0) + Math.floor(((stats.hints | 0) + (stats.undos | 0)) * 0.5);
+  if (!country.pending) country.pending = [];
+  if (won && key) country.pending.push({ type: "clear", key: key });
+  for (let i = 0; i < days; i++) {
+    country.pending.push({ type: "cool" });
+    country.pending.push({ type: "advance" });
+  }
+};
+
+// Apply the next queued step. Returns true while more steps remain.
+Overmap.step = function (country) {
+  const s = country.pending && country.pending.shift();
+  if (s && s.type === "clear") {
+    Overmap.clearInfected(country, s.key);
+    country.wins = (country.wins | 0) + 1;
+  } else if (s && s.type === "cool") {
+    Overmap.cool(country);
+  } else if (s && s.type === "advance") {
+    Overmap.advance(country);
+    country.time = (country.time | 0) + 1;
+  }
+  return Overmap.busy(country);
+};
+
+Overmap.busy = function (country) {
+  return !!(country && country.pending && country.pending.length);
+};
+
+Overmap.playable = function (country, key) {
+  const h = country.hexes[key];
+  return !!(h && h.stage === STAGE_INFECTED && h.plan);
+};
+
+Overmap.infectedCount = function (country) {
+  let n = 0;
+  const keys = Object.keys(country.hexes);
+  for (let i = 0; i < keys.length; i++) {
+    if (country.hexes[keys[i]].stage === STAGE_INFECTED) n++;
+  }
+  return n;
+};
+
+Overmap.setHexPlan = function (country, key, plan) {
+  if (country.hexes[key]) country.hexes[key].plan = Plan.copy(plan);
+};
+
 Overmap.isWin = function (country) {
   const keys = Object.keys(country.hexes);
   for (let i = 0; i < keys.length; i++) {

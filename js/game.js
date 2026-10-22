@@ -2,9 +2,6 @@
 
 const AIM_COLOR = "#f2e27a";
 const AIM_HINT_COLOR = "#f7a227";
-// Each map step (clear, cool, advance) and its tween. Tween == step so the
-// next snapshot lands exactly as the previous tween finishes.
-const MAP_STEP_MS = 450;
 
 function Game() {
   this.ui = new Ui();
@@ -37,7 +34,7 @@ function Game() {
   this.origin = { x: 0, y: 0, cell: 32, rows: 6, cols: 6 };
   this.trayH = 80;
   this.tray = { h: 80, stamps: [] };
-    this.stampHeldIndex = 0;
+  this.stampHeldIndex = 0;
   this.bound = false;
   this.propMs = 60;
   this.actions = [];
@@ -51,11 +48,7 @@ function Game() {
   this.mode = "level";
   this.gameMode = null;
   this.country = null;
-  this.mapCanvas = null;
-  this.mapCtx = null;
-  this.mapLayout = null;
-  this.mapTicking = false;
-  this.fade = null;
+  this.mapView = null;
   this.activeHexKey = null;
   this.lastHexKey = null;
   this.mapBound = false;
@@ -66,8 +59,7 @@ function Game() {
 Game.prototype.boot = function () {
   this.global = Save.readGlobal();
   this.testPlan = Plan.fromQuery(location.search);
-  this.mapCanvas = document.getElementById("map");
-  this.mapCtx = this.mapCanvas ? this.mapCanvas.getContext("2d") : null;
+  this.mapView = new MapView(document.getElementById("map"), this.updateMapHud.bind(this));
   this.bind();
   const mapMenu = document.getElementById("btn-map-menu");
   if (mapMenu) {
@@ -330,7 +322,6 @@ Game.prototype.startOver = function () {
   this.global = Save.readGlobal();
   this.activeHexKey = null;
   this.lastHexKey = null;
-  this.mapTicking = false;
   this.clearHold();
   this.preview = null;
   this.returnToStart();
@@ -466,8 +457,8 @@ Game.prototype.beginWave = function (plan) {
   this.plan = Plan.copy(plan);
   if (this.plan.seed == null) {
     this.plan.seed = (Math.random() * 0x100000000) >>> 0;
-    if (this.country && this.activeHexKey && this.country.hexes[this.activeHexKey]) {
-      this.country.hexes[this.activeHexKey].plan = Plan.copy(this.plan);
+    if (this.country && this.activeHexKey) {
+      Overmap.setHexPlan(this.country, this.activeHexKey, this.plan);
       Save.writeCountry(this.country);
     }
   }
@@ -1101,7 +1092,7 @@ Game.prototype.persist = function () {
 Game.prototype.setMode = function (mode) {
   this.mode = mode;
   const board = this.ui.canvas;
-  const map = this.mapCanvas;
+  const map = this.mapView.canvas;
   const mapTop = document.getElementById("map-hud-top");
   const mapBot = document.getElementById("map-hud-bottom");
   const levelHud = document.getElementById("hud-bottom");
@@ -1114,7 +1105,7 @@ Game.prototype.setMode = function (mode) {
   if (levelHud) levelHud.style.display = isLevel ? "" : "none";
   if (isMap) {
     this.bindMap();
-    this.layoutMap();
+    this.mapView.layout(this.country);
     this.drawMap();
   } else {
     this.unbindMap();
@@ -1124,43 +1115,25 @@ Game.prototype.setMode = function (mode) {
 };
 
 Game.prototype.bindMap = function () {
-  if (this.mapBound || !this.mapCanvas) return;
+  if (this.mapBound || !this.mapView.canvas) return;
   this.mapBound = true;
   const self = this;
   this._mapDown = function (e) { self.onMapDown(e); };
   this._mapUp = function (e) { self.onMapUp(e); };
-  this.mapCanvas.addEventListener("pointerdown", this._mapDown);
-  this.mapCanvas.addEventListener("pointerup", this._mapUp);
+  this.mapView.canvas.addEventListener("pointerdown", this._mapDown);
+  this.mapView.canvas.addEventListener("pointerup", this._mapUp);
 };
 
 Game.prototype.unbindMap = function () {
-  if (!this.mapBound || !this.mapCanvas) return;
+  if (!this.mapBound || !this.mapView.canvas) return;
   this.mapBound = false;
-  if (this._mapDown) this.mapCanvas.removeEventListener("pointerdown", this._mapDown);
-  if (this._mapUp) this.mapCanvas.removeEventListener("pointerup", this._mapUp);
-};
-
-Game.prototype.layoutMap = function () {
-  if (!this.mapCanvas || !this.country) return;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  this.mapCanvas.style.width = w + "px";
-  this.mapCanvas.style.height = h + "px";
-  this.mapCanvas.style.imageRendering = "pixelated";
-  this.mapCanvas.width = Math.floor(w * dpr);
-  this.mapCanvas.height = Math.floor(h * dpr);
-  this.mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const topEl = document.getElementById("map-hud-top");
-  const botEl = document.getElementById("map-hud-bottom");
-  const top = topEl && !topEl.hidden ? topEl.getBoundingClientRect().height : 0;
-  const bot = botEl && !botEl.hidden ? botEl.getBoundingClientRect().height : 0;
-  this.mapLayout = MapDraw.layout(this.mapCanvas, this.country, { top: top, bot: bot });
+  if (this._mapDown) this.mapView.canvas.removeEventListener("pointerdown", this._mapDown);
+  if (this._mapUp) this.mapView.canvas.removeEventListener("pointerup", this._mapUp);
 };
 
 Game.prototype.onResize = function () {
   if (this.mode === "map") {
-    this.layoutMap();
+    this.mapView.layout(this.country);
     this.drawMap();
   } else {
     this.layout();
@@ -1168,38 +1141,16 @@ Game.prototype.onResize = function () {
 };
 
 Game.prototype.drawMap = function () {
-  if (!this.mapCtx || !this.country || !this.mapLayout) return;
-  let fade = null;
-  if (this.fade) {
-    const elapsed = Date.now() - this.fade.start;
-    if (elapsed < this.fade.dur) {
-      fade = { oldStyles: this.fade.oldStyles, t: elapsed / this.fade.dur };
-    } else {
-      this.fade = null;
-    }
-  }
-  MapDraw.render(this.mapCtx, this.country, this.mapLayout, this.activeHexKey || this.lastHexKey, fade);
-};
-
-Game.prototype.startMapFade = function (oldStyles) {
-  this.fade = { oldStyles: oldStyles, start: Date.now(), dur: MAP_STEP_MS };
-  const self = this;
-  function frame() {
-    if (!self.fade) return;
-    self.drawMap();
-    if (self.fade) requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
+  this.mapView.draw(this.country, this.activeHexKey || this.lastHexKey);
 };
 
 // Select on release, not press: opening the card on pointerdown let the touch
 // click that follows land on the card (GO/Back). Down only records the hex.
 Game.prototype.onMapDown = function (e) {
   this.mapPress = null;
-  if (this.mode !== "map" || !this.country || this.mapTicking || this.ui.planOpen()) return;
+  if (this.mode !== "map" || !this.country || Overmap.busy(this.country) || this.ui.planOpen()) return;
   e.preventDefault();
-  const rect = this.mapCanvas.getBoundingClientRect();
-  const key = MapDraw.hit(this.mapLayout, e.clientX - rect.left, e.clientY - rect.top);
+  const key = this.mapView.hit(e);
   if (key) this.mapPress = { id: e.pointerId, key: key };
 };
 
@@ -1207,12 +1158,10 @@ Game.prototype.onMapUp = function (e) {
   const press = this.mapPress;
   this.mapPress = null;
   if (!press || press.id !== e.pointerId) return;
-  if (this.mode !== "map" || !this.country || this.mapTicking || this.ui.planOpen()) return;
-  const rect = this.mapCanvas.getBoundingClientRect();
-  const key = MapDraw.hit(this.mapLayout, e.clientX - rect.left, e.clientY - rect.top);
-  if (key !== press.key) return;
+  if (this.mode !== "map" || !this.country || Overmap.busy(this.country) || this.ui.planOpen()) return;
+  const key = this.mapView.hit(e);
+  if (key !== press.key || !Overmap.playable(this.country, key)) return;
   const hex = this.country.hexes[key];
-  if (!hex || hex.stage !== STAGE_INFECTED || !hex.plan) return;
   // Stay in map mode: the card opens over the live map and the hex stays outlined.
   this.activeHexKey = key;
   this.ui.hideStart();
@@ -1256,9 +1205,11 @@ Game.prototype.onLevelExit = function (reason) {
     }
     return;
   }
-  // campaign
+  // campaign: Overmap queues the clear and the days; the map view plays them.
   const key = this.activeHexKey;
-  const days = 1 + (this.resets | 0) + Math.floor(((this.hintCount | 0) + (this.undoCount | 0)) * 0.5);
+  Overmap.endLevel(this.country, key, reason === "win",
+    { resets: this.resets, hints: this.hintCount, undos: this.undoCount });
+  Save.writeCountry(this.country);
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
@@ -1273,64 +1224,12 @@ Game.prototype.onLevelExit = function (reason) {
   this.ended = null;
   this.plan = null;
   this.setMode("map");
-  this.mapTicking = true;
-  const self = this;
-  const doClear = reason === "win" && key;
-  function finishTicks() {
-    if (Overmap.isWin(self.country)) {
-      self.country.status = "COUNTRY CLEARED";
-    } else if (Overmap.isLoss(self.country)) {
-      self.country.status = "THE HORDE CONSUMED THE COUNTRY";
-    } else {
-      self.country.status = "";
-    }
-    self.updateMapHud();
-    Save.writeCountry(self.country);
-    self.mapTicking = false;
-  }
-  // Each day is two visible steps: cool (decay, protect, clear empties), then
-  // advance, so the player sees warnings drop before they can rise again.
-  function stepDays(remaining) {
-    if (remaining <= 0) {
-      finishTicks();
-      return;
-    }
-    window.setTimeout(function () {
-      const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
-      Overmap.cool(self.country);
-      Save.writeCountry(self.country);
-      self.startMapFade(old);
-      self.updateMapHud();
-      window.setTimeout(function () {
-        const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
-        Overmap.advance(self.country);
-        self.country.time = (self.country.time | 0) + 1;
-        Save.writeCountry(self.country);
-        self.startMapFade(old);
-        self.updateMapHud();
-        stepDays(remaining - 1);
-      }, MAP_STEP_MS);
-    }, MAP_STEP_MS);
-  }
-  if (doClear) {
-    window.setTimeout(function () {
-      const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
-      Overmap.clearInfected(self.country, key);
-      self.country.wins = (self.country.wins | 0) + 1;
-      Save.writeCountry(self.country);
-      self.startMapFade(old);
-      self.updateMapHud();
-      stepDays(days);
-    }, MAP_STEP_MS);
-  } else {
-    stepDays(days);
-  }
 };
 
 Game.prototype.finishIntro = function () {
   this.global.introDone = true;
   Save.writeGlobal(this.global);
-  this.country = Overmap.generate(Date.now(), 32, 1);
+  this.country = Overmap.create(Date.now());
   Save.writeCountry(this.country);
   this.persistRun();
   this.setMode("map");
@@ -1338,23 +1237,25 @@ Game.prototype.finishIntro = function () {
 
 Game.prototype.updateMapHud = function () {
   if (!this.country) return;
-  let infected = 0;
-  const keys = Object.keys(this.country.hexes);
-  for (let i = 0; i < keys.length; i++) {
-    if (this.country.hexes[keys[i]].stage === STAGE_INFECTED) infected++;
-  }
   const elI = document.getElementById("map-infected");
   const elT = document.getElementById("map-time");
   const elW = document.getElementById("map-wins");
   const elTries = document.getElementById("map-tries");
   const elTime = document.getElementById("map-total-time");
-  if (elI) elI.textContent = "INFECTED " + infected;
+  if (elI) elI.textContent = "INFECTED " + Overmap.infectedCount(this.country);
   if (elT) elT.textContent = "DAY " + (this.country.time | 0);
   if (elW) elW.textContent = "WINS " + (this.country.wins | 0);
   if (elTries) elTries.textContent = "TRIES " + (this.tries | 0);
   if (elTime) elTime.textContent = "TIME " + this.formatTime(this.totalTime | 0);
   const elStatus = document.getElementById("map-status");
-  if (elStatus) elStatus.textContent = this.country.status || "";
+  if (elStatus) {
+    let status = "";
+    if (!Overmap.busy(this.country)) {
+      if (Overmap.isWin(this.country)) status = "COUNTRY CLEARED";
+      else if (Overmap.isLoss(this.country)) status = "THE HORDE CONSUMED THE COUNTRY";
+    }
+    elStatus.textContent = status;
+  }
 };
 
 
