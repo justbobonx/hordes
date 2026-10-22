@@ -383,11 +383,11 @@ Game.prototype.openPlan = function () {
         isTutorial: true
       }];
     } else {
-      cards = Planner.offer(this.wave);
+      cards = Planner.offer(Planner.waveTier(this.wave), this.wave);
       for (let i = 0; i < cards.length; i++) cards[i].isTutorial = true;
     }
   } else {
-    cards = Planner.offer(this.wave);
+    cards = Planner.offer(Planner.waveTier(this.wave), this.wave);
     for (let i = 0; i < cards.length; i++) cards[i].isTutorial = false;
   }
   this.ui.paintPlans(cards);

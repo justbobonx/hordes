@@ -2,9 +2,31 @@
 
 function Planner() {}
 
-const EXTRAS_UNLOCK = {
-  fuel: { minlevel: 10, onPlan: 0.6, range: [0.2, 0.5] },
-  strength: { minlevel: 10, onPlan: 0.6 },
+// piece count per tier: uniform roll from min to max
+// Wave  | Nebrs | Pieces
+// 1-8   |   0   |  3–4
+// 9–12  |   1   |  3–5
+// 13–17 |   2   |  4–6
+// 18-23 |   3   |  5–7
+// 24-30 |   4   |  5–8
+// 31+   |   5   |  5–9
+//       |   6   |  6–9
+// Endless picks the tier by wave; campaign passes a hex's infected-neighbor count.
+const PIECE_TIERS = [
+  { min: 3, max: 4 },
+  { min: 3, max: 5 },
+  { min: 4, max: 6 },
+  { min: 5, max: 7 },
+  { min: 5, max: 8 },
+  { min: 5, max: 9 },
+  { min: 6, max: 9 },
+];
+// first wave of tiers 1..5
+const TIER_WAVES = [9, 13, 18, 24, 31];
+
+const EXTRAS = {
+  fuel: { onPlan: 0.6, range: [0.2, 0.5] },
+  strength: { onPlan: 0.6 },
   // barrier
 };
 
@@ -30,27 +52,18 @@ Planner.intro = function (step) {
   });
 };
 
-Planner.offer = function (wave) {
+Planner.waveTier = function (wave) {
+  let tier = 0;
+  while (tier < TIER_WAVES.length && wave >= TIER_WAVES[tier]) tier++;
+  return tier;
+};
+
+// tier picks the piece count (see PIECE_TIERS); wave is only the plan's label.
+Planner.offer = function (tier, wave) {
   const w = wave > 0 ? wave : 1;
-  // piece count per wave: base plus random downward range
-  // 1-8   | 4 | 3–4 |
-  // 9–12  | 5 | 3–5 |
-  // 13–17 | 6 | 4–6 |
-  // 18-23 | 7 | 5–7 |
-  // 24-30 | 8 | 5–8 |
-  // 31+   | 9 | 5–9 |
-  let base = 4;
-  let hold = 3;
-  let at = 6;
-  while (w >= at + hold && base < 9) {
-    at += hold;
-    base++;
-    hold = base - 1;
-  }
-  let sub = base === 4 ? 1 : (base <= 7 ? 2 : base - 5);
-  let count = base + (((Math.random() * (sub + 1)) | 0) - sub);
-  if (count < 1) count = 1;
-  
+  const range = PIECE_TIERS[Math.max(0, Math.min(PIECE_TIERS.length - 1, tier | 0))];
+  const count = range.min + ((Math.random() * (range.max - range.min + 1)) | 0);
+
   const pool = [];
   const ids = Object.keys(Grid.STAMP_DEFINITIONS);
   for (let i = 0; i < ids.length; i++) {
@@ -67,9 +80,9 @@ Planner.offer = function (wave) {
   for (let n = 0; n < count && pool.length; n++) stamps.push(pool[n]);
 
   let fuelChance = 0;
-  if (w >= EXTRAS_UNLOCK.fuel.minlevel && Math.random() < EXTRAS_UNLOCK.fuel.onPlan) {
-    const lo = EXTRAS_UNLOCK.fuel.range[0];
-    const hi = EXTRAS_UNLOCK.fuel.range[1];
+  if (Math.random() < EXTRAS.fuel.onPlan) {
+    const lo = EXTRAS.fuel.range[0];
+    const hi = EXTRAS.fuel.range[1];
     fuelChance = lo + Math.random() * (hi - lo);
   }
 
@@ -108,7 +121,7 @@ Planner.offer = function (wave) {
   let stronger = 0;
   // stronger is now the relative excess above the overlap floor (0 = floors only, 1 = all overlaps).
   // overlap > 0 still produces a mandatory strong floor even when stronger = 0.
-  if ( w >= EXTRAS_UNLOCK.strength.minlevel && Math.random() < EXTRAS_UNLOCK.strength.onPlan) {
+  if (Math.random() < EXTRAS.strength.onPlan) {
     overlap = Math.random();
     stronger = Math.random();
   }  

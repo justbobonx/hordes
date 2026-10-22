@@ -13,8 +13,13 @@ const STAGE_YELLOW = 1;
 const STAGE_ORANGE = 2;
 const STAGE_INFECTED = 3;
 
-const MIN_INFECTED_SEEDS = 6
-const MIN_NON_CLEAR_SEEDS = 11;
+// generate pre-rolls advances until both floors are met and then any one stop is reached
+// (checked per whole advance, so may overshoot)
+const GEN_MIN_INFECTED = 9;
+const GEN_MIN_NON_CLEAR = 12;
+const GEN_STOP_PIECES = 7;
+const GEN_STOP_INFECTED = 15;
+const GEN_STOP_NON_CLEAR = 24;
 
 //const SPREAD_PROBS = [0, 0.05, 0.10, 0.40, 0.70, 0.90, 1.00];
 const SPREAD_PROBS = [0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8];
@@ -216,41 +221,45 @@ Overmap.generate = function (seed, targetCount, startWave) {
     for (let i = 0; i < keys.length && seeds.length < 3; i++) {
       if (seeds.indexOf(keys[i]) < 0) seeds.push(keys[i]);
     }
-    let nextWave = startWave;
-    for (let i = 0; i < seeds.length; i++) {
-      const h = hexes[seeds[i]];
-      h.stage = STAGE_INFECTED;
-      h.wave = nextWave;
-      const cards = Planner.offer(nextWave);
-      h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
-      if (h.plan) {
-        h.plan.wave = nextWave;
-        h.plan.seed = Overmap.planSeed(countrySeed, h.q, h.r);
-      }
-      nextWave++;
-    }
     const country = {
       seed: countrySeed,
       time: 0,
-      nextWave: nextWave,
+      nextWave: startWave,
       hexes: hexes,
       clears: 0,
       losses: 0,
       totalTime: 0,
       status: ""
     };
+    for (let i = 0; i < seeds.length; i++) hexes[seeds[i]].stage = STAGE_INFECTED;
+    // tier = infected neighbors; seeds sit MIN_SEED_DIST apart so this is normally 0
+    for (let i = 0; i < seeds.length; i++) {
+      const h = hexes[seeds[i]];
+      const wave = country.nextWave;
+      h.wave = wave;
+      const cards = Planner.offer(Overmap.infectedNeighborCount(country, seeds[i]), wave);
+      h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
+      if (h.plan) {
+        h.plan.wave = wave;
+        h.plan.seed = Overmap.planSeed(countrySeed, h.q, h.r);
+      }
+      country.nextWave = wave + 1;
+    }
     
     let advances = 0;
     while (advances < MAX_ADVANCE) {
       let infected = 0;
       let nonClear = 0;
+      let pieces = 0;
       const ks = Object.keys(country.hexes);
       for (let i = 0; i < ks.length; i++) {
-        const stage = country.hexes[ks[i]].stage;
-        if (stage === STAGE_INFECTED) infected++;
-        if (stage !== STAGE_CLEAR) nonClear++;
+        const h = country.hexes[ks[i]];
+        if (h.stage === STAGE_INFECTED) infected++;
+        if (h.stage !== STAGE_CLEAR) nonClear++;
+        if (h.plan && h.plan.stamps.length > pieces) pieces = h.plan.stamps.length;
       }
-      if (infected >= MIN_INFECTED_SEEDS && nonClear >= MIN_NON_CLEAR_SEEDS) {
+      if (infected >= GEN_MIN_INFECTED && nonClear >= GEN_MIN_NON_CLEAR &&
+          (pieces >= GEN_STOP_PIECES || infected >= GEN_STOP_INFECTED || nonClear >= GEN_STOP_NON_CLEAR)) {
         country.time = 1;
         return country;
       }
@@ -321,12 +330,13 @@ Overmap.advance = function (country) {
     }
     if (Math.random() < p) toAdvance.push(keys[i]);
   }
+  for (let i = 0; i < toAdvance.length; i++) country.hexes[toAdvance[i]].stage += 1;
+  // plans after the whole batch flips, so hexes infected together count each other
   for (let i = 0; i < toAdvance.length; i++) {
     const h = country.hexes[toAdvance[i]];
-    h.stage += 1;
     if (h.stage === STAGE_INFECTED && !h.plan) {
       const wave = country.nextWave || 7;
-      const cards = Planner.offer(wave);
+      const cards = Planner.offer(Overmap.infectedNeighborCount(country, toAdvance[i]), wave);
       h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
       if (h.plan) {
         h.plan.wave = wave;
