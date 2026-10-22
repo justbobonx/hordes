@@ -10,7 +10,7 @@ const STAGE_SAFER = -2;
 const STAGE_SAFE = -1;
 const STAGE_CLEAR = 0;
 const STAGE_YELLOW = 1;
-const STAGE_RED_OUTLINE = 2;
+const STAGE_ORANGE = 2;
 const STAGE_INFECTED = 3;
 
 const MIN_INFECTED_SEEDS = 6
@@ -284,7 +284,7 @@ Overmap.cool = function (country) {
   // existing yellow/red cool if isolated from infected
   for (let i = 0; i < keys.length; i++) {
     const h = country.hexes[keys[i]];
-    if (h.stage === STAGE_YELLOW || h.stage === STAGE_RED_OUTLINE) {
+    if (h.stage === STAGE_YELLOW || h.stage === STAGE_ORANGE) {
       if (Overmap.infectedNeighborCount(country, keys[i]) === 0) {
         h.stage = STAGE_CLEAR;
         h.plan = null;
@@ -315,7 +315,7 @@ Overmap.advance = function (country) {
       p = SPREAD_PROBS[n];
     } else if (h.stage === STAGE_YELLOW) {
       p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + YELLOW_PLUS);
-    } else { // STAGE_RED_OUTLINE
+    } else { // STAGE_ORANGE
       p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + RED_PLUS);
     }
     if (Math.random() < p) toAdvance.push(keys[i]);

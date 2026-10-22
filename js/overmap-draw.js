@@ -1,5 +1,21 @@
 /** Map canvas drawing and hit testing. Knows stages and colors only. */
 
+// Every hex is a full-size base tile plus an inner hex. Inner scale is a
+// fraction of the radius (0 = bare tile). Line width is lineW * size, never
+// under lineMin pixels. "Empty" inner hexes reuse the base fill so tweens to a
+// filled stage blend. INFECTED gives [4-stamp, 9-stamp] ranges for scale and fill.
+const HEX_BASE_LOOK = { fill: "#1a3a1a", stroke: "#4a7a4a", lineW: 0.08, lineMin: 1.5 };
+
+const HEX_TYPE_LOOK = {
+  [STAGE_CLEAR]:        { scale: 0,   fill: HEX_BASE_LOOK.fill, stroke: HEX_BASE_LOOK.stroke, lineW: 0.05, lineMin: 1 },
+  [STAGE_JUST_CLEARED]: { scale: 1,   fill: "#d2ffd2",          stroke: "#e6ffe6",            lineW: 0.08, lineMin: 1.5 },
+  [STAGE_SAFER]:        { scale: 0.8, fill: "#3c963c",          stroke: "#5abe5a",            lineW: 0.05, lineMin: 1 },
+  [STAGE_SAFE]:         { scale: 0.5, fill: "#3c963c",          stroke: "#5abe5a",            lineW: 0.05, lineMin: 1 },
+  [STAGE_YELLOW]:       { scale: 0.6, fill: HEX_BASE_LOOK.fill, stroke: "#f2e27a",            lineW: 0.09, lineMin: 1.5 },
+  [STAGE_ORANGE]:       { scale: 0.8, fill: HEX_BASE_LOOK.fill, stroke: "#f7a227",            lineW: 0.09, lineMin: 1.5 },
+  [STAGE_INFECTED]:     { scale: [0.5, 0.9], fill: ["#6e1c1c", "#c82e1c"], stroke: "#e15a52", lineW: 0.05, lineMin: 1 },
+};
+
 function MapDraw() {}
 
 MapDraw.layout = function (canvas, country, insets) {
@@ -67,57 +83,40 @@ MapDraw.hexPath = function (ctx, x, y, size) {
   ctx.closePath();
 };
 
-MapDraw.styleFor = function (hex, size) {
-  const baseFill = [26, 58, 26];
-  const baseStroke = [74, 122, 74];
-  const baseLW = Math.max(1.5, size * 0.08);
-  const thickLW = Math.max(2, size * 0.12);
-  if (!hex || hex.stage === STAGE_CLEAR) {
-    return { fill: baseFill, stroke: baseStroke, lineW: baseLW };
-  }
-  if (hex.stage === STAGE_JUST_CLEARED) {
-    return { fill: [210, 255, 210], stroke: [230, 255, 230], lineW: baseLW };
-  }
-  if (hex.stage === STAGE_SAFER || hex.stage === STAGE_SAFE) {
-    return { fill: [60, 150, 60], stroke: [90, 190, 90], lineW: baseLW };
-  }
-  if (hex.stage === STAGE_YELLOW) {
-    return { fill: baseFill, stroke: [242, 226, 122], lineW: thickLW };
-  }
-  if (hex.stage === STAGE_RED_OUTLINE) {
-    return { fill: baseFill, stroke: [247, 162, 39], lineW: thickLW };
-  }
-  // STAGE_INFECTED
+// Resolve a hex to a ready-to-paint {scale, fill, stroke, lineW}.
+MapDraw.lookFor = function (hex, size) {
+  const e = HEX_TYPE_LOOK[hex ? hex.stage : STAGE_CLEAR];
+  const lineW = Math.max(e.lineMin, size * e.lineW);
+  if (!Array.isArray(e.scale)) return { scale: e.scale, fill: e.fill, stroke: e.stroke, lineW: lineW };
   const pieces = hex.plan && hex.plan.stamps ? hex.plan.stamps.length : 4;
   const t = Math.max(0, Math.min(1, (pieces - 4) / 5));
-  const r = 110 + t * 90;
-  const g = 28 + t * 18;
-  const b = 28;
-  return { fill: [r | 0, g | 0, b], stroke: [225, 90, 82], lineW: baseLW };
+  return {
+    scale: e.scale[0] + (e.scale[1] - e.scale[0]) * t,
+    fill: MapDraw.lerpColor(e.fill[0], e.fill[1], t),
+    stroke: e.stroke,
+    lineW: lineW,
+  };
 };
 
 MapDraw.captureStyles = function (country, size) {
   const styles = {};
   const keys = Object.keys(country.hexes);
   for (let i = 0; i < keys.length; i++) {
-    const hex = country.hexes[keys[i]];
-    const st = MapDraw.styleFor(hex, size);
-    st.stage = hex.stage;
-    // explicit visual scale at capture time so later stage changes cannot confuse the shrink
-    if (hex.stage === STAGE_SAFE) st.scale = 0.4;
-    else if (hex.stage === STAGE_SAFER || hex.stage === STAGE_JUST_CLEARED) st.scale = 0.9;
-    else st.scale = 0.9;
-    styles[keys[i]] = st;
+    styles[keys[i]] = MapDraw.lookFor(country.hexes[keys[i]], size);
   }
   return styles;
 };
 
+// Blend two "#rrggbb" colors; returns "#rrggbb".
 MapDraw.lerpColor = function (a, b, t) {
-  return [
-    (a[0] + (b[0] - a[0]) * t) | 0,
-    (a[1] + (b[1] - a[1]) * t) | 0,
-    (a[2] + (b[2] - a[2]) * t) | 0,
-  ];
+  const x = parseInt(a.slice(1), 16);
+  const y = parseInt(b.slice(1), 16);
+  let out = 0;
+  for (let shift = 16; shift >= 0; shift -= 8) {
+    const ca = (x >> shift) & 255;
+    out |= ((ca + (((y >> shift) & 255) - ca) * t) | 0) << shift;
+  }
+  return "#" + out.toString(16).padStart(6, "0");
 };
 
 MapDraw.render = function (ctx, country, layout, highlightKey, fade) {
@@ -128,97 +127,55 @@ MapDraw.render = function (ctx, country, layout, highlightKey, fade) {
   ctx.fillRect(0, 0, w, h);
   const keys = Object.keys(layout.positions || {});
   const size = layout.size;
+  const baseLW = Math.max(HEX_BASE_LOOK.lineMin, size * HEX_BASE_LOOK.lineW);
   const t = fade && fade.t != null ? Math.max(0, Math.min(1, fade.t)) : 1;
+  const s = t * t * (3 - 2 * t); // smoothstep
   const oldStyles = fade && fade.oldStyles;
+
+  // Pass 1: base tiles at full radius, sharing edges with neighbors.
   for (let i = 0; i < keys.length; i++) {
     const pos = layout.positions[keys[i]];
-    const hex = country.hexes[keys[i]];
-    if (oldStyles && oldStyles[keys[i]] && t < 1) {
-      const from = oldStyles[keys[i]];
-      const to = MapDraw.styleFor(hex, size);
-      to.stage = hex.stage;
-      MapDraw.drawHexLerp(ctx, pos.x, pos.y, size, from, to, t);
-    } else {
-      MapDraw.drawHex(ctx, pos.x, pos.y, size, hex);
-    }
+    MapDraw.paintHexAt(ctx, pos.x, pos.y, size,
+      { fill: HEX_BASE_LOOK.fill, stroke: HEX_BASE_LOOK.stroke, lineW: baseLW });
   }
-  // Selection: second pass so neighbors never paint over it. Weak outline just
-  // inside the 0.9 body so the hex's own border still reads.
+
+  // Pass 2: inner hexes, after all bases so a full-size inner (JUST_CLEARED)
+  // is not half-covered by a later neighbor's edge.
+  for (let i = 0; i < keys.length; i++) {
+    const pos = layout.positions[keys[i]];
+    const to = MapDraw.lookFor(country.hexes[keys[i]], size);
+    const from = oldStyles && t < 1 ? oldStyles[keys[i]] : null;
+    let st = to;
+    if (from) {
+      // Growing from or shrinking to a bare tile keeps the visible side's colors.
+      const colorsFrom = from.scale === 0 ? to : from;
+      const colorsTo = to.scale === 0 ? from : to;
+      st = {
+        scale: from.scale + (to.scale - from.scale) * s,
+        fill: MapDraw.lerpColor(colorsFrom.fill, colorsTo.fill, s),
+        stroke: MapDraw.lerpColor(colorsFrom.stroke, colorsTo.stroke, s),
+        lineW: colorsFrom.lineW + (colorsTo.lineW - colorsFrom.lineW) * s,
+      };
+    }
+    if (size * st.scale > 0.5) MapDraw.paintHexAt(ctx, pos.x, pos.y, size * st.scale, st);
+  }
+
+  // Pass 3: selection on the full tile edge, same width as the base border.
   const sel = highlightKey && layout.positions[highlightKey];
   if (sel) {
-    MapDraw.hexPath(ctx, sel.x, sel.y, size * 0.75);
+    MapDraw.hexPath(ctx, sel.x, sel.y, size);
     ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.lineWidth = Math.max(1, size * 0.04);
+    ctx.lineWidth = baseLW;
     ctx.stroke();
   }
-};
-
-MapDraw.drawHex = function (ctx, x, y, size, hex) {
-  if (hex && hex.stage === STAGE_SAFE) {
-    const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
-    MapDraw.paintHex(ctx, x, y, size, base);
-    const med = { fill: [60, 150, 60], stroke: [90, 190, 90], lineW: Math.max(1, size * 0.05) };
-    MapDraw.paintHexAt(ctx, x, y, size * 0.4, med);
-    return;
-  }
-  const st = MapDraw.styleFor(hex, size);
-  MapDraw.paintHex(ctx, x, y, size, st);
-};
-
-MapDraw.drawHexLerp = function (ctx, x, y, size, from, to, t) {
-  const s = t * t * (3 - 2 * t); // smoothstep
-  const fromScale = from.scale != null ? from.scale : 0.9;
-  const toStage = to.stage;
-  const medFill = [60, 150, 60];
-  const med = { fill: medFill, stroke: [90, 190, 90], lineW: Math.max(1, size * 0.05) };
-  const base = MapDraw.styleFor({ stage: STAGE_CLEAR }, size);
-
-  // SAFER (full) → SAFE (inset): shrink 0.9 → 0.4
-  if (fromScale > 0.5 && toStage === STAGE_SAFE) {
-    MapDraw.paintHex(ctx, x, y, size, base);
-    const pathSize = size * (0.9 + (0.4 - 0.9) * s);
-    MapDraw.paintHexAt(ctx, x, y, pathSize, med);
-    return;
-  }
-
-  // SAFE (inset) → CLEAR: shrink 0.4 → 0
-  if (fromScale <= 0.5 && toStage === STAGE_CLEAR) {
-    MapDraw.paintHex(ctx, x, y, size, base);
-    const pathSize = size * fromScale * (1 - s);
-    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med);
-    return;
-  }
-
-  // Held or starting SAFE visual (scale ≤ 0.5) that is not shrinking to CLEAR.
-  // Paint the inset at the captured scale so the old state is correct at t = 0
-  // and during any non-shrink transition.
-  if (fromScale <= 0.5) {
-    MapDraw.paintHex(ctx, x, y, size, base);
-    const pathSize = size * fromScale;
-    if (pathSize > 0.5) MapDraw.paintHexAt(ctx, x, y, pathSize, med);
-    // If you later need a color blend out of SAFE into a non-CLEAR target,
-    // lerp the med color toward to.fill here and paint that instead of the
-    // fixed med. For the current stages this is enough.
-    return;
-  }
-
-  // default color lerp (both sides full-size)
-  const fill = MapDraw.lerpColor(from.fill, to.fill, s);
-  const stroke = MapDraw.lerpColor(from.stroke, to.stroke, s);
-  const lineW = from.lineW + (to.lineW - from.lineW) * s;
-  MapDraw.paintHex(ctx, x, y, size, { fill: fill, stroke: stroke, lineW: lineW });
-};
-
-MapDraw.paintHex = function (ctx, x, y, size, style) {
-  MapDraw.paintHexAt(ctx, x, y, size * 0.9, style);
 };
 
 MapDraw.paintHexAt = function (ctx, x, y, pathSize, style) {
   if (pathSize <= 0) return;
   MapDraw.hexPath(ctx, x, y, pathSize);
-  ctx.fillStyle = "rgb(" + style.fill[0] + "," + style.fill[1] + "," + style.fill[2] + ")";
+  ctx.fillStyle = style.fill;
   ctx.fill();
-  ctx.strokeStyle = "rgb(" + style.stroke[0] + "," + style.stroke[1] + "," + style.stroke[2] + ")";
+  ctx.strokeStyle = style.stroke;
   ctx.lineWidth = style.lineW;
   ctx.stroke();
 };
@@ -239,5 +196,5 @@ MapDraw.hit = function (layout, x, y) {
       best = keys[i];
     }
   }
-  return bestD < (size * 0.9) * (size * 0.9) ? best : null;
+  return bestD < size * size ? best : null;
 };
