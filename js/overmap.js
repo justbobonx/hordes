@@ -19,7 +19,7 @@ const MIN_NON_CLEAR_SEEDS = 11;
 //const SPREAD_PROBS = [0, 0.05, 0.10, 0.40, 0.70, 0.90, 1.00];
 const SPREAD_PROBS = [0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8];
 const YELLOW_PLUS = 0.2;
-const RED_PLUS = 0.4;
+const ORANGE_PLUS = 0.4;
 
 function Overmap() {}
 
@@ -261,27 +261,28 @@ Overmap.generate = function (seed, targetCount, startWave) {
   return null;
 };
 
+// One cool step: decay, then protect, then clear empties. Decay runs first so
+// a hex cleared this level becomes SAFER and protects on the very next day.
 Overmap.cool = function (country) {
   const keys = Object.keys(country.hexes);
-  // SAFER radiates: lower non-infected positive stages on neighbors
+  // decay: JUST_CLEARED -> SAFER, SAFER -> SAFE, SAFE -> CLEAR
+  for (let i = 0; i < keys.length; i++) {
+    const h = country.hexes[keys[i]];
+    if (h.stage < 0) h.stage += 1;
+  }
+  // protect: each SAFER lowers neighboring yellow/orange one step
   for (let i = 0; i < keys.length; i++) {
     const h = country.hexes[keys[i]];
     if (h.stage !== STAGE_SAFER) continue;
     const neigh = Overmap.neighbors(h.q, h.r);
     for (let j = 0; j < neigh.length; j++) {
-      const nk = Overmap.key(neigh[j].q, neigh[j].r);
-      const nh = country.hexes[nk];
+      const nh = country.hexes[Overmap.key(neigh[j].q, neigh[j].r)];
       if (nh && nh.stage > STAGE_CLEAR && nh.stage < STAGE_INFECTED) {
         nh.stage -= 1;
       }
     }
   }
-  // decay negatives: JUST_CLEARED -> SAFER, SAFER -> SAFE, SAFE -> CLEAR
-  for (let i = 0; i < keys.length; i++) {
-    const h = country.hexes[keys[i]];
-    if (h.stage < 0) h.stage += 1;
-  }
-  // existing yellow/red cool if isolated from infected
+  // clear empties: yellow/orange with no infected neighbor
   for (let i = 0; i < keys.length; i++) {
     const h = country.hexes[keys[i]];
     if (h.stage === STAGE_YELLOW || h.stage === STAGE_ORANGE) {
@@ -316,7 +317,7 @@ Overmap.advance = function (country) {
     } else if (h.stage === STAGE_YELLOW) {
       p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + YELLOW_PLUS);
     } else { // STAGE_ORANGE
-      p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + RED_PLUS);
+      p = Math.min(1, SPREAD_PROBS[Math.min(n, 6)] + ORANGE_PLUS);
     }
     if (Math.random() < p) toAdvance.push(keys[i]);
   }
@@ -337,11 +338,6 @@ Overmap.advance = function (country) {
   }
 };
 
-Overmap.tick = function (country) {
-  Overmap.cool(country);
-  Overmap.advance(country);
-  country.time = (country.time | 0) + 1;
-};
 
 Overmap.isWin = function (country) {
   const keys = Object.keys(country.hexes);

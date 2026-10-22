@@ -2,8 +2,9 @@
 
 const AIM_COLOR = "#f2e27a";
 const AIM_HINT_COLOR = "#f7a227";
-const DAY_TICK_MS = 700;
-const FADE_MS = 550;
+// Each map step (clear, cool, advance) and its tween. Tween == step so the
+// next snapshot lands exactly as the previous tween finishes.
+const MAP_STEP_MS = 450;
 
 function Game() {
   this.ui = new Ui();
@@ -1181,7 +1182,7 @@ Game.prototype.drawMap = function () {
 };
 
 Game.prototype.startMapFade = function (oldStyles) {
-  this.fade = { oldStyles: oldStyles, start: Date.now(), dur: FADE_MS };
+  this.fade = { oldStyles: oldStyles, start: Date.now(), dur: MAP_STEP_MS };
   const self = this;
   function frame() {
     if (!self.fade) return;
@@ -1287,6 +1288,8 @@ Game.prototype.onLevelExit = function (reason) {
     Save.writeCountry(self.country);
     self.mapTicking = false;
   }
+  // Each day is two visible steps: cool (decay, protect, clear empties), then
+  // advance, so the player sees warnings drop before they can rise again.
   function stepDays(remaining) {
     if (remaining <= 0) {
       finishTicks();
@@ -1294,12 +1297,20 @@ Game.prototype.onLevelExit = function (reason) {
     }
     window.setTimeout(function () {
       const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
-      Overmap.tick(self.country);
+      Overmap.cool(self.country);
       Save.writeCountry(self.country);
       self.startMapFade(old);
       self.updateMapHud();
-      stepDays(remaining - 1);
-    }, DAY_TICK_MS);
+      window.setTimeout(function () {
+        const old = MapDraw.captureStyles(self.country, self.mapLayout ? self.mapLayout.size : 20);
+        Overmap.advance(self.country);
+        self.country.time = (self.country.time | 0) + 1;
+        Save.writeCountry(self.country);
+        self.startMapFade(old);
+        self.updateMapHud();
+        stepDays(remaining - 1);
+      }, MAP_STEP_MS);
+    }, MAP_STEP_MS);
   }
   if (doClear) {
     window.setTimeout(function () {
@@ -1310,7 +1321,7 @@ Game.prototype.onLevelExit = function (reason) {
       self.startMapFade(old);
       self.updateMapHud();
       stepDays(days);
-    }, DAY_TICK_MS);
+    }, MAP_STEP_MS);
   } else {
     stepDays(days);
   }

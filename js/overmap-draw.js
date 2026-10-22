@@ -4,16 +4,16 @@
 // fraction of the radius (0 = bare tile). Line width is lineW * size, never
 // under lineMin pixels. "Empty" inner hexes reuse the base fill so tweens to a
 // filled stage blend. INFECTED gives [4-stamp, 9-stamp] ranges for scale and fill.
-const HEX_BASE_LOOK = { fill: "#1a3a1a", stroke: "#4a7a4a", lineW: 0.08, lineMin: 1.5 };
+const HEX_BASE_LOOK = { fill: "#183618", stroke: "#476d47", lineW: 0.05, lineMin: 1 };
 
 const HEX_TYPE_LOOK = {
   [STAGE_CLEAR]:        { scale: 0,   fill: HEX_BASE_LOOK.fill, stroke: HEX_BASE_LOOK.stroke, lineW: 0.05, lineMin: 1 },
   [STAGE_JUST_CLEARED]: { scale: 1,   fill: "#d2ffd2",          stroke: "#e6ffe6",            lineW: 0.08, lineMin: 1.5 },
   [STAGE_SAFER]:        { scale: 0.8, fill: "#3c963c",          stroke: "#5abe5a",            lineW: 0.05, lineMin: 1 },
   [STAGE_SAFE]:         { scale: 0.5, fill: "#3c963c",          stroke: "#5abe5a",            lineW: 0.05, lineMin: 1 },
-  [STAGE_YELLOW]:       { scale: 0.6, fill: HEX_BASE_LOOK.fill, stroke: "#f2e27a",            lineW: 0.09, lineMin: 1.5 },
-  [STAGE_ORANGE]:       { scale: 0.8, fill: HEX_BASE_LOOK.fill, stroke: "#f7a227",            lineW: 0.09, lineMin: 1.5 },
-  [STAGE_INFECTED]:     { scale: [0.5, 0.9], fill: ["#6e1c1c", "#c82e1c"], stroke: "#e15a52", lineW: 0.05, lineMin: 1 },
+  [STAGE_YELLOW]:       { scale: 0.5, fill: "#132b13", stroke: "#f2e27a",            lineW: 0.08, lineMin: 1.5 },
+  [STAGE_ORANGE]:       { scale: 0.7, fill: "#132b13", stroke: "#f7a227",            lineW: 0.09, lineMin: 1.5 },
+  [STAGE_INFECTED]:     { scale: [0.4, 0.8], fill: ["#6e1c1c", "#c82e1c"], stroke: "#e15a52", lineW: 0.05, lineMin: 1 },
 };
 
 function MapDraw() {}
