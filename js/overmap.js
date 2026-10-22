@@ -26,6 +26,9 @@ const SPREAD_PROBS = [0.0, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8];
 const YELLOW_PLUS = 0.2;
 const ORANGE_PLUS = 0.4;
 
+// a new horde's plan tier: max(infected neighbors, floor(neighbor plan pieces / this))
+const PIECES_PER_TIER = 4;
+
 function Overmap() {}
 
 Overmap.key = function (q, r) {
@@ -39,6 +42,22 @@ Overmap.neighbors = function (q, r) {
     out.push({ q: q + d[0], r: r + d[1] });
   }
   return out;
+};
+
+// Plan tier for a hex turning infected: its infected-neighbor count, raised when those
+// neighbors are big hordes (total plan pieces / PIECES_PER_TIER). Capped by Planner.
+Overmap.hordeTier = function (country, key) {
+  const hex = country.hexes[key];
+  let n = 0;
+  let pieces = 0;
+  const neigh = Overmap.neighbors(hex.q, hex.r);
+  for (let i = 0; i < neigh.length; i++) {
+    const nh = country.hexes[Overmap.key(neigh[i].q, neigh[i].r)];
+    if (!nh || nh.stage !== STAGE_INFECTED) continue;
+    n++;
+    if (nh.plan) pieces += nh.plan.stamps.length;
+  }
+  return Math.max(n, Math.floor(pieces / PIECES_PER_TIER));
 };
 
 Overmap.infectedNeighborCount = function (country, key) {
@@ -232,12 +251,12 @@ Overmap.generate = function (seed, targetCount, startWave) {
       status: ""
     };
     for (let i = 0; i < seeds.length; i++) hexes[seeds[i]].stage = STAGE_INFECTED;
-    // tier = infected neighbors; seeds sit MIN_SEED_DIST apart so this is normally 0
+    // seeds sit MIN_SEED_DIST apart so their tier is normally 0
     for (let i = 0; i < seeds.length; i++) {
       const h = hexes[seeds[i]];
       const wave = country.nextWave;
       h.wave = wave;
-      const cards = Planner.offer(Overmap.infectedNeighborCount(country, seeds[i]), wave);
+      const cards = Planner.offer(Overmap.hordeTier(country, seeds[i]), wave);
       h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
       if (h.plan) {
         h.plan.wave = wave;
@@ -336,7 +355,7 @@ Overmap.advance = function (country) {
     const h = country.hexes[toAdvance[i]];
     if (h.stage === STAGE_INFECTED && !h.plan) {
       const wave = country.nextWave || 7;
-      const cards = Planner.offer(Overmap.infectedNeighborCount(country, toAdvance[i]), wave);
+      const cards = Planner.offer(Overmap.hordeTier(country, toAdvance[i]), wave);
       h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
       if (h.plan) {
         h.plan.wave = wave;
