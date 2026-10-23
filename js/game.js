@@ -90,13 +90,13 @@ Game.prototype.boot = function () {
   document.addEventListener("fullscreenchange", function () { self.onResize(); });
   document.addEventListener("webkitfullscreenchange", function () { self.onResize(); });
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) {
-      self.flushActions();
-      self.pauseClock();
-      self.persist();
-    } else if (self.grid && !self.ended && !self.ui.startOpen()) {
-      self.clockOn = Date.now();
-    }
+    // Leaving the page saves and drops to the title, so coming back never
+    // lands mid-play with a stale clock or lost fullscreen.
+    if (!document.hidden) return;
+    self.flushActions();
+    self.pauseClock();
+    self.persist();
+    if (!self.ui.startOpen()) self.returnToStart();
   });
   window.addEventListener("pagehide", function () {
     self.flushActions();
@@ -112,19 +112,16 @@ Game.prototype.bind = function () {
   this.ui.bind({
     // Help plays the start story, then returns to the title.
     help: function () {
-      self.chrome.enter();
       self.ui.hideStart();
       self.openStory("start", "title");
     },
     planPick: function (card) {
-      self.chrome.enter();
       self.onPlan(card);
     },
     planBack: function () {
       self.onPlanBack();
     },
     storyContinue: function () {
-      self.chrome.enter();
       self.advanceStory();
     },
     back: function () {
@@ -140,10 +137,13 @@ Game.prototype.bind = function () {
     undo: function () {
       self.onUndo();
     },
+    // Starting any mode from the title is the one place play goes fullscreen.
     continueMode: function (mode) {
+      self.chrome.enter();
       self.enterMode(mode, false);
     },
     newMode: function (mode) {
+      self.chrome.enter();
       self.enterMode(mode, true);
     },
     startOver: function () {
@@ -215,6 +215,7 @@ Game.prototype.refreshStart = function () {
 Game.prototype.returnToStart = function () {
   this.abortActions();
   this.pauseClock();
+  this.chrome.leave();
   this.clearHold();
   this.preview = null;
   this.grid = null;
