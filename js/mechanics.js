@@ -185,7 +185,27 @@ Game.prototype.landCell = function (action, hit) {
   action.landed[key] = true;
   const cell = this.grid.at(hit.r, hit.c);
   const wasFuel = cell && cell.is("fuel");
-  if (this.grid.apply([hit])) this.lost = true;
+  const wasHorde = cell && cell.is("horde");
+  const ruined = this.grid.apply([hit]);
+  if (ruined) this.lost = true;
+  // This is the frame the hit shows: each kind of hit pops its own burst, and
+  // every other cell the wave touches gets the small default poof.
+  let count = BURST_POOF;
+  let scale = BURST_POOF_SCALE;
+  if (wasHorde && !cell.is("horde")) {
+    count = BURST_HORDE;
+    scale = BURST_HORDE_SCALE;
+  } else if (wasHorde) {
+    count = BURST_STRENGTH;
+    scale = BURST_STRENGTH_SCALE;
+  } else if (ruined || wasFuel) {
+    count = BURST_CITY;
+    scale = BURST_CITY_SCALE;
+  }
+  if (cell) {
+    const o = this.origin;
+    this.particles.burst(o.x + (hit.c + 0.5) * o.cell, o.y + (hit.r + 0.5) * o.cell, o.cell, count, scale);
+  }
   if (action.hint) {
     const after = this.grid.at(hit.r, hit.c);
     if (after && after.is("cleared")) after.setType("cleared_hint");

@@ -3,6 +3,22 @@
 const AIM_COLOR = "#f2e27a";
 const AIM_HINT_COLOR = "#f7a227";
 
+// Each ruined city on the level board sends up smoke puffs at about this rate.
+const CITY_PUFFS_PER_SEC = 3;
+// Dots and size scale of the burst for each kind of hit: the small default poof
+// on any cell, a strong horde cell losing a point, a horde cell killed, a city
+// ruined or fuel set off.
+const BURST_POOF = 3;
+const BURST_POOF_SCALE = 0.6;
+const BURST_STRENGTH = 3;
+const BURST_STRENGTH_SCALE = 1;
+const BURST_HORDE = 5;
+const BURST_HORDE_SCALE = 1;
+const BURST_CITY = 5;
+const BURST_CITY_SCALE = 0.75;
+// Longest frame step in seconds, so a stalled or hidden tab does not make the world jump.
+const FRAME_DT_MAX = 0.1;
+
 // Level penalty in days (Game.penalty): resets and undos grow by sqrt, each
 // hint costs HINT_LEVEL_DAYS spread over the level's pieces, capped per hint.
 const RESET_DAYS = 0.75;
@@ -64,6 +80,8 @@ function Game() {
   this.mapBound = false;
   this.global = Save.readGlobal();
   this.isTutorial = false;
+  // Level board effects only, in board canvas pixels.
+  this.particles = new Particles();
 }
 
 Game.prototype.boot = function () {
@@ -218,6 +236,7 @@ Game.prototype.returnToStart = function () {
   this.chrome.leave();
   this.clearHold();
   this.preview = null;
+  this.particles.clear();
   this.grid = null;
   this.plan = null;
   this.ended = null;
@@ -504,6 +523,7 @@ Game.prototype.beginWave = function (plan) {
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
+  this.particles.clear();
   this.layout();
   this.persist();
   this.updateHud();
@@ -539,6 +559,7 @@ Game.prototype.restore = function (data) {
   // elapsed and resets come from run (already loaded in boot)
   this.clockOn = this.ended ? 0 : Date.now();
   this.ui.hideStart();
+  this.particles.clear();
   this.layout();
   if (this.ended) this.pauseClock();
   this.updateHud();
@@ -592,6 +613,7 @@ Game.prototype.resetWave = function () {
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
+  this.particles.clear();
   this.persist();
   this.updateHud();
 };

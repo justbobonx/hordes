@@ -12,6 +12,8 @@ Game.prototype.layout = function () {
   canvas.width = Math.floor(w * dpr);
   canvas.height = Math.floor(h * dpr);
   this.ui.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Particles live in board pixels, which a new layout moves.
+  this.particles.clear();
   const rows = this.grid ? this.grid.rows : 6;
   const cols = this.grid ? this.grid.cols : 6;
   const trayH = this.trayH;
@@ -95,7 +97,7 @@ Game.prototype.pointOnPreview = function (x, y) {
   return false;
 };
 
-Game.prototype.draw = function () {
+Game.prototype.draw = function (dt) {
   const ctx = this.ui.ctx;
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -103,7 +105,20 @@ Game.prototype.draw = function () {
   ctx.fillRect(0, 0, w, h);
   this.layoutTray();
   this.drawTray(ctx);
-  if (this.grid) this.drawBoard(ctx);
+  if (!this.grid) return;
+  this.drawBoard(ctx);
+  if (this.mode !== "level") return;
+  // Smoke rises from whatever cities are ruined right now, so undo and reset
+  // need no bookkeeping. It keeps going after the level ends.
+  const o = this.origin;
+  for (let r = 0; r < this.grid.rows; r++) {
+    for (let c = 0; c < this.grid.cols; c++) {
+      if (!this.grid.at(r, c).is("ruined") || Math.random() >= CITY_PUFFS_PER_SEC * dt) continue;
+      this.particles.puff(o.x + (c + 0.5) * o.cell, o.y + (r + 0.5) * o.cell, o.cell);
+    }
+  }
+  this.particles.step(dt);
+  this.particles.draw(ctx);
 };
 
 Game.prototype.drawTray = function (ctx) {
@@ -142,9 +157,12 @@ Game.prototype.drawTray = function (ctx) {
 
 Game.prototype.loop = function () {
   const self = this;
-  function tick() {
+  let last = 0;
+  function tick(now) {
+    const dt = last ? Math.min(FRAME_DT_MAX, (now - last) / 1000) : 0;
+    last = now;
     if (self.mode === "map") self.drawMap();
-    else self.draw();
+    else self.draw(dt);
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
