@@ -1,5 +1,13 @@
 /** Wave spec. Copies, reads, query parse. Does not offer a card. */
 
+// Fueled plans read bigger on the map. Their stamps scaled up by fuel chance span
+// the FROM range (smallest stamps at lowest fuel to biggest growable stamps at
+// highest fuel), which maps onto the TO range of displayed sizes.
+const FUEL_SIZE_FROM_MIN = 3.6;
+const FUEL_SIZE_FROM_MAX = 10.5;
+const FUEL_SIZE_TO_MIN = 4;
+const FUEL_SIZE_TO_MAX = 9;
+
 function Plan() {}
 
 Plan.blank = function () {
@@ -78,6 +86,14 @@ Plan.copy = function (plan) {
   if (area != null) out.area = area;
   if (plan.seed != null) out.seed = plan.seed >>> 0;
   return out;
+};
+
+// Pieces the plan looks like on the map: its stamps, or for a fueled plan its
+// fuel-scaled stamps mapped onto the display range and rounded to a whole piece.
+Plan.fuelSizeAdjust = function (plan) {
+  if (plan.fuelChance <= 0) return plan.stamps.length;
+  const raw = plan.stamps.length * (1 + plan.fuelChance);
+  return Math.round(FUEL_SIZE_TO_MIN + (raw - FUEL_SIZE_FROM_MIN) * (FUEL_SIZE_TO_MAX - FUEL_SIZE_TO_MIN) / (FUEL_SIZE_FROM_MAX - FUEL_SIZE_FROM_MIN));
 };
 
 Plan.label = function (kind) {

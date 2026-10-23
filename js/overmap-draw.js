@@ -3,7 +3,8 @@
 // Every hex is a full-size base tile plus an inner hex. Inner scale is a
 // fraction of the radius (0 = bare tile). Line width is lineW * size, never
 // under lineMin pixels. "Empty" inner hexes reuse the base fill so tweens to a
-// filled stage blend. INFECTED gives [4-stamp, 9-stamp] ranges for scale and fill.
+// filled stage blend. INFECTED gives [4-piece, 9-piece] ranges for scale and fill,
+// sized by the plan's pieces with fueled plans reading bigger.
 const HEX_BASE_LOOK = { fill: "#183618", stroke: "#476d47", lineW: 0.05, lineMin: 1 };
 
 const HEX_TYPE_LOOK = {
@@ -88,7 +89,7 @@ MapDraw.lookFor = function (hex, size) {
   const e = HEX_TYPE_LOOK[hex ? hex.stage : STAGE_CLEAR];
   const lineW = Math.max(e.lineMin, size * e.lineW);
   if (!Array.isArray(e.scale)) return { scale: e.scale, fill: e.fill, stroke: e.stroke, lineW: lineW };
-  const pieces = hex.plan && hex.plan.stamps ? hex.plan.stamps.length : 4;
+  const pieces = hex.plan && hex.plan.stamps ? Plan.fuelSizeAdjust(hex.plan) : 4;
   const t = Math.max(0, Math.min(1, (pieces - 4) / 5));
   return {
     scale: e.scale[0] + (e.scale[1] - e.scale[0]) * t,

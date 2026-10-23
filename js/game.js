@@ -3,6 +3,15 @@
 const AIM_COLOR = "#f2e27a";
 const AIM_HINT_COLOR = "#f7a227";
 
+// Level penalty in days (Game.penalty): resets and undos grow by sqrt, each
+// hint costs HINT_LEVEL_DAYS spread over the level's pieces, capped per hint.
+const RESET_DAYS = 0.75;
+const UNDO_DAYS = 0.4;
+const HINT_LEVEL_DAYS = 3;
+const HINT_MAX_DAYS = 0.5;
+// Endless score: 100 at no penalty, 0 at this many penalty days.
+const SCORE_MAX_DAYS = 5;
+
 function Game() {
   this.ui = new Ui();
   this.chrome = new PlayChrome();
@@ -24,6 +33,7 @@ function Game() {
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
+  this.perfect = true;
   this.tries = 0;
   this.totalTime = 0;
   this.storyQueue = [];
@@ -233,6 +243,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.resets = 0;
     this.hintCount = 0;
     this.undoCount = 0;
+    this.perfect = true;
     this.tries = 0;
     this.totalTime = 0;
     this.activeHexKey = null;
@@ -246,6 +257,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.resets = run.resets | 0;
     this.hintCount = run.hintCount | 0;
     this.undoCount = run.undoCount | 0;
+    this.perfect = !!run.perfect;
     this.tries = run.tries | 0;
     this.totalTime = run.totalTime | 0;
     this.activeHexKey = run.activeHexKey || null;
@@ -331,6 +343,7 @@ Game.prototype.startOver = function () {
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
+  this.perfect = true;
   this.tries = 0;
   this.totalTime = 0;
   this.clockOn = 0;
@@ -486,6 +499,7 @@ Game.prototype.beginWave = function (plan) {
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
+  this.perfect = true;
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -526,6 +540,7 @@ Game.prototype.restore = function (data) {
   this.ui.hideStart();
   this.layout();
   if (this.ended) this.pauseClock();
+  this.updateHud();
 };
 
 Game.prototype.restoreStrength = function (strengths) {
@@ -571,6 +586,7 @@ Game.prototype.resetWave = function () {
   this.lost = false;
   this.ended = null;
   this.resets = (this.resets | 0) + 1;
+  this.perfect = false;
   // do not zero elapsedMs — keep the figuring-out time
   this.clockOn = Date.now();
   this.clearHold();
@@ -634,7 +650,9 @@ Game.prototype.onHint = function () {
   if (!fp) return;
   this.selectedQ = best;
   this.preview = { qIndex: best, row: fp.anchor.r, col: fp.anchor.c };
+  this.perfect = false;
   this.hintLock = true;
+  this.updateHud();
   const self = this;
   if (this.hintTimer) window.clearTimeout(this.hintTimer);
   this.hintTimer = window.setTimeout(function () {
@@ -684,6 +702,9 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
   if (!this.enqueueProp(pruned, seeds, hint, row, col)) return;
   this.pendingUndo = {
     piece: boardId,
+    qIndex: qIndex,
+    row: row,
+    col: col,
     types: this.grid.types(),
     strengths: this.grid.strengths(),
     oStrengths: this.grid.oStrengths(),
@@ -726,7 +747,10 @@ Game.prototype.onDown = function (e) {
     grabDy: 0,
   };
   if (trayHit) {
+    // Any tray tap or drag (drag aim and tap-select in onMove/onUp start here) costs the perfect.
     this.selectedQ = trayHit.index;
+    this.perfect = false;
+    this.updateHud();
   }else if( inTray ) {
     //in tray but no piece
     return;
@@ -948,6 +972,9 @@ Game.prototype.commitPendingUndo = function () {
   if (changes.length) {
     this.undoStack.push({
       piece: this.pendingUndo.piece,
+      qIndex: this.pendingUndo.qIndex,
+      row: this.pendingUndo.row,
+      col: this.pendingUndo.col,
       changeCells: changes,
     });
   }
@@ -971,21 +998,42 @@ Game.prototype.onUndo = function () {
   const idx = this.used.indexOf(rec.piece);
   if (idx >= 0) this.used.splice(idx, 1);
   this.undoCount = (this.undoCount | 0) + 1;
+  this.perfect = false;
   this.rebuildQueue();
   this.lost = this.grid.ruinedCount() > 0;
   if (this.ended === "lose") {
     this.ended = null;
     this.clockOn = Date.now();
   }
-  this.selectedQ = this.queue.length ? 0 : null;
-  this.preview = null;
+  // The queue keeps board-piece order, so the undone piece is back at the
+  // index it was dropped from; show it aimed where it landed.
+  this.selectedQ = rec.qIndex;
+  this.preview = { qIndex: rec.qIndex, row: rec.row, col: rec.col };
   this.clearHold();
   this.persist();
   this.updateHud();
 };
 
+// Days this level costs so far; both campaign days and the endless score read it.
+Game.prototype.penalty = function () {
+  return RESET_DAYS * Math.sqrt(this.resets | 0)
+    + (this.hintCount | 0) * Math.min(HINT_MAX_DAYS, HINT_LEVEL_DAYS / this.plan.stamps.length)
+    + UNDO_DAYS * Math.sqrt(this.undoCount | 0);
+};
+
 Game.prototype.updateHud = function () {
   const status = this.statusView();
+  // Live result: campaign days (a perfect win passes none), endless score.
+  let tally = "";
+  if (this.grid && this.plan && !this.isTutorial) {
+    if (this.gameMode === "campaign") {
+      // Whole days owed plus how far the penalty has crept toward the next one.
+      const penalty = this.perfect ? 0 : this.penalty();
+      const whole = Math.floor(penalty);
+            tally = "DAYS " + (this.perfect ? 0 : 1 + whole) + " +" + String(Math.floor((penalty - whole) * 100)).padStart(2, "0") + "%";
+    }
+    else tally = "SCORE " + (this.perfect ? "100+" : Math.round(100 * Math.max(0, 1 - this.penalty() / SCORE_MAX_DAYS)));
+  }
   this.ui.paintHud({
     wave: this.plan ? this.plan.wave || this.wave : this.wave,
     isTutorial: this.isTutorial,
@@ -998,6 +1046,8 @@ Game.prototype.updateHud = function () {
     hideHint: status.hideHint,
     hideBack: status.hideBack,
     canUndo: this.undoStack.length > 0 && this.ended !== "win",
+    tally: tally,
+    perfect: !!tally && this.perfect,
   });
 };
 
@@ -1063,6 +1113,7 @@ Game.prototype.persistRun = function () {
     resets: this.resets | 0,
     hintCount: this.hintCount | 0,
     undoCount: this.undoCount | 0,
+    perfect: this.perfect,
     activeHexKey: this.activeHexKey || null,
     lastHexKey: this.lastHexKey || null,
     tries: this.tries | 0,
@@ -1211,12 +1262,12 @@ Game.prototype.onLevelExit = function (reason) {
   }
   // campaign: Overmap queues the clear and the days; the map view plays them.
   const key = this.activeHexKey;
-  Overmap.endLevel(this.country, key, reason === "win",
-    { resets: this.resets, hints: this.hintCount, undos: this.undoCount });
+  Overmap.endLevel(this.country, key, reason === "win", { penalty: this.penalty(), perfect: this.perfect });
   Save.writeCountry(this.country);
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
+  this.perfect = true;
   this.tries = (this.tries | 0) + 1;
   this.totalTime = (this.totalTime | 0) + this.elapsedMs;
   this.activeHexKey = null;

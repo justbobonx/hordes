@@ -5,6 +5,8 @@ function Ui() {
   this.ctx = this.canvas.getContext("2d");
   this.elWave = document.getElementById("wave-label");
   this.elStatus = document.getElementById("status-msg");
+  this.elTally = document.getElementById("tally-text");
+  this.elPerfect = document.getElementById("tally-perfect");
   this.elHudBottom = document.getElementById("hud-bottom");
   this.btnBack = document.getElementById("btn-back");
   this.btnUndo = document.getElementById("btn-undo");
@@ -121,6 +123,8 @@ Ui.prototype.paintHud = function (view) {
     }
     this.elWave.innerHTML = label;
   }
+  if (this.elTally) this.elTally.textContent = view.tally;
+  if (this.elPerfect) this.elPerfect.hidden = !view.perfect;
   this.paintStatus(view);
   if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
   if (this.btnUndo) this.btnUndo.disabled = !view.canUndo;

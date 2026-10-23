@@ -374,13 +374,18 @@ Overmap.create = function (seed) {
 };
 
 // Queue everything that happens on the map after a level: the clear on a
-// win, then a cool and an advance per day. Days grow with resets, hints and
-// undos. Steps play one at a time via Overmap.step and persist with the
-// country, so an interrupted run resumes.
+// win, then a cool and an advance per day. Days are 1 + floor(stats.penalty)
+// (Game.penalty); a perfect win only clears and cools, so no day passes.
+// Steps play one at a time via Overmap.step and persist with the country, so
+// an interrupted run resumes.
 Overmap.endLevel = function (country, key, won, stats) {
-  const days = 1 + (stats.resets | 0) + Math.floor(((stats.hints | 0) + (stats.undos | 0)) * 0.5);
   if (!country.pending) country.pending = [];
   if (won && key) country.pending.push({ type: "clear", key: key });
+  if (won && stats.perfect) {
+    country.pending.push({ type: "cool" });
+    return;
+  }
+  const days = 1 + Math.floor(stats.penalty);
   for (let i = 0; i < days; i++) {
     country.pending.push({ type: "cool" });
     country.pending.push({ type: "advance" });

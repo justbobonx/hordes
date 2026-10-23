@@ -79,6 +79,9 @@ button, a { font-family: inherit; }
   justify-content: flex-end;
 }
 
+#tally-perfect { color: #f2e27a; }
+#tally-perfect[hidden] { display: none; }
+
 #status-msg.status-blue { color: #8eb0f0; }
 #status-msg.status-green { color: #a8e0a0; }
 #status-msg.status-red { color: #f09090; }
