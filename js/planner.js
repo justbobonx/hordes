@@ -3,14 +3,14 @@
 function Planner() {}
 
 // piece count per tier: uniform roll from min to max
-// Wave  | Nebrs | Pieces
-// 1-8   |   0   |  3–4
-// 9–12  |   1   |  3–5
-// 13–17 |   2   |  4–6
-// 18-23 |   3   |  5–7
-// 24-30 |   4   |  5–8
-// 31+   |   5   |  5–9
-//       |   6   |  6–9
+// Wave  | Nebrs | Pieces | Ave Size
+// 1-8   |   0   |  3–4   |  3.5
+// 9–12  |   1   |  3–5   |  4
+// 13–17 |   2   |  4–6   |  5
+// 18-23 |   3   |  5–7   |  6
+// 24-30 |   4   |  5–8   |  6.5
+// 31+   |   5   |  5–9   |  7
+//       |   6   |  6–9   |  7.5
 // Endless picks the tier by wave; campaign passes a hex's infected-neighbor count.
 const PIECE_TIERS = [
   { min: 3, max: 4 },
