@@ -46,7 +46,7 @@ function Game() {
   this.tray = { h: 80, stamps: [] };
   this.stampHeldIndex = 0;
   this.bound = false;
-  this.propMs = 60;
+  this.propMs = 90;
   this.actions = [];
   this.actionTimer = 0;
   this.stampHeld = false;
