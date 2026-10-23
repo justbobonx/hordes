@@ -4,8 +4,11 @@
 // Sprite code and assets stay loaded either way.
 const USE_SPRITES = false;
 
-// Extra inset growth per hit taken (fraction of cell size).
-const STRENGTH_INSET_GROW = 0.05;
+// Extra inset per hit taken, as a fraction of cell size:
+// STRENGTH_INSET_STEP * (FIRST for hit 1, then + NEXT per additional hit).
+const STRENGTH_INSET_STEP = 0.1;
+const STRENGTH_INSET_FIRST = 0.8;
+const STRENGTH_INSET_NEXT = 0.2;
 
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
@@ -124,7 +127,7 @@ Cell.dressGrid = function (grid) {
 Cell.prototype.draw = function (ctx, sprites, x, y, size) {
   const baseInset = Math.max(1, size * 0.06);
   const hits = Math.max(0, (this.oStrength || 1) - (this.strength || 1));
-  const extra = hits * STRENGTH_INSET_GROW * size;
+  const extra = hits > 0 ? STRENGTH_INSET_STEP * (STRENGTH_INSET_FIRST + STRENGTH_INSET_NEXT * (hits - 1)) * size : 0;
   const inset = baseInset + extra;
   const look = CELL_TYPES[this.type] || CELL_TYPES.grass;
   const base = Math.max(4, Math.floor(size * 0.18));
