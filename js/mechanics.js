@@ -158,13 +158,19 @@ Game.prototype.onCellLand = function (action, r, c, wasFuel, from) {
   return null;
 };
 
-Game.prototype.kickActions = function () {
-  if (this.actionTimer || !this.actions.length) return;
-  const self = this;
-  this.actionTimer = window.setTimeout(function () {
-    self.actionTimer = 0;
-    self.stepActions();
-  }, this.propMs);
+// Called every frame: banks the frame's time and lands one ring of the wave
+// each time a full step's worth has built up, so rings land on frame
+// boundaries at a steady pace. A new wave starts its first step from empty.
+Game.prototype.runActions = function (dt) {
+  if (!this.actions.length) {
+    this.actionMs = 0;
+    return;
+  }
+  this.actionMs += dt * 1000;
+  while (this.actions.length && this.actionMs >= this.propMs) {
+    this.actionMs -= this.propMs;
+    this.stepActions();
+  }
 };
 
 Game.prototype.stepActions = function () {
@@ -175,8 +181,7 @@ Game.prototype.stepActions = function () {
   const action = this.actions[0];
   if (action.type === "wave") this.stepWave(action);
   if (action.done) this.actions.shift();
-  if (this.actions.length) this.kickActions();
-  else this.settleStamp();
+  if (!this.actions.length) this.settleStamp();
 };
 
 Game.prototype.landCell = function (action, hit) {
@@ -267,8 +272,7 @@ Game.prototype.settleStamp = function () {
 };
 
 Game.prototype.flushActions = function () {
-  if (this.actionTimer) window.clearTimeout(this.actionTimer);
-  this.actionTimer = 0;
+  this.actionMs = 0;
   while (this.actions.length && this.grid) {
     const action = this.actions[0];
     if (action.type === "wave" && !action.stopped) {
@@ -297,8 +301,7 @@ Game.prototype.flushActions = function () {
 };
 
 Game.prototype.abortActions = function () {
-  if (this.actionTimer) window.clearTimeout(this.actionTimer);
-  this.actionTimer = 0;
+  this.actionMs = 0;
   if (this.hintTimer) window.clearTimeout(this.hintTimer);
   this.hintTimer = 0;
   this.hintLock = false;

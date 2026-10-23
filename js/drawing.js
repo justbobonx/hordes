@@ -161,6 +161,7 @@ Game.prototype.loop = function () {
   function tick(now) {
     const dt = last ? Math.min(FRAME_DT_MAX, (now - last) / 1000) : 0;
     last = now;
+    self.runActions(dt);
     if (self.mode === "map") self.drawMap();
     else self.draw(dt);
     requestAnimationFrame(tick);

@@ -64,7 +64,8 @@ function Game() {
   this.bound = false;
   this.propMs = 90;
   this.actions = [];
-  this.actionTimer = 0;
+  // Time banked toward the next wave step, filled by the frame loop.
+  this.actionMs = 0;
   this.stampHeld = false;
   this.hintLock = false;
   this.hintTimer = 0;
@@ -739,7 +740,6 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
   this.preview = null;
   this.persist();
   this.updateHud();
-  this.kickActions();
 };
 
 Game.prototype.onDown = function (e) {
