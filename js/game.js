@@ -9,7 +9,7 @@ const CITY_PUFFS_PER_SEC = 3;
 // on any cell, a strong horde cell losing a point, a horde cell killed, a city
 // ruined or fuel set off.
 const BURST_POOF = 3;
-const BURST_POOF_SCALE = 0.6;
+const BURST_POOF_SCALE = 0.45;
 const BURST_STRENGTH = 3;
 const BURST_STRENGTH_SCALE = 1;
 const BURST_HORDE = 5;

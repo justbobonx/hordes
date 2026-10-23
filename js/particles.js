@@ -1,10 +1,20 @@
 /** Generic particle pool: white fading dots that drift, slow or speed up, swell, and vanish. */
 
-// Most particles alive at once; new emits are dropped while full.
-const PARTICLES_MAX = 400;
+// Most particles alive at once; when full, a new one replaces the oldest.
+const PARTICLES_MAX = 600;
 // A particle this faint is gone.
 const ALPHA_DEAD = 0.02;
 const PARTICLE_COLOR = "#ffffff";
+// Dots are stamped from one image drawn at startup instead of filling a path
+// for each one. Soft fades the dot out toward its edge, otherwise it is a
+// crisp solid circle that looks the same as a vector fill.
+const PARTICLE_SOFT = false;
+// Pixel width of that image, big enough that the largest dot on a dense
+// screen is shrunk rather than stretched.
+const PARTICLE_DOT_PX = 128;
+// For the soft dot, how far out from the center it stays fully solid, as a
+// fraction of its radius, before fading to clear at the edge.
+const PARTICLE_SOFT_CORE = 0.3;
 
 // Hit burst: a few dots fanning out evenly from the cell center.
 // Sizes and distances are fractions of a cell, speeds are cells per second,
@@ -45,7 +55,30 @@ const PUFF_FADE_MS = 1200;
 const PUFF_FADE_JITTER = 0.25;
 
 function Particles() {
+  // A fixed ring of slots; new particles go in the next slot around, so the
+  // slot being reused always holds the oldest one. Dead slots are just skipped.
   this.list = [];
+  for (let i = 0; i < PARTICLES_MAX; i++) {
+    this.list.push({ x: 0, y: 0, size: 0, vx: 0, vy: 0, alpha: 0, alphaDecay: 1, speedDecay: 1, growth: 1 });
+  }
+  this.next = 0;
+  this.dot = document.createElement("canvas");
+  this.dot.width = PARTICLE_DOT_PX;
+  this.dot.height = PARTICLE_DOT_PX;
+  const ctx = this.dot.getContext("2d");
+  const r = PARTICLE_DOT_PX / 2;
+  if (PARTICLE_SOFT) {
+    const fade = ctx.createRadialGradient(r, r, 0, r, r, r);
+    fade.addColorStop(0, PARTICLE_COLOR);
+    fade.addColorStop(PARTICLE_SOFT_CORE, PARTICLE_COLOR);
+    fade.addColorStop(1, PARTICLE_COLOR + "00");
+    ctx.fillStyle = fade;
+  } else {
+    ctx.fillStyle = PARTICLE_COLOR;
+  }
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // A random offset anywhere within the given amount either side of zero.
@@ -60,14 +93,23 @@ Particles.fadeDecay = function (alpha, fadeMs) {
 };
 
 Particles.prototype.emit = function (x, y, size, vx, vy, alpha, alphaDecay, speedDecay, growth) {
-  if (this.list.length >= PARTICLES_MAX) return;
-  this.list.push({ x: x, y: y, size: size, vx: vx, vy: vy, alpha: alpha, alphaDecay: alphaDecay, speedDecay: speedDecay, growth: growth });
+  const p = this.list[this.next];
+  this.next = (this.next + 1) % PARTICLES_MAX;
+  p.x = x;
+  p.y = y;
+  p.size = size;
+  p.vx = vx;
+  p.vy = vy;
+  p.alpha = alpha;
+  p.alphaDecay = alphaDecay;
+  p.speedDecay = speedDecay;
+  p.growth = growth;
 };
 
 Particles.prototype.step = function (dt) {
-  let i = 0;
-  while (i < this.list.length) {
+  for (let i = 0; i < PARTICLES_MAX; i++) {
     const p = this.list[i];
+    if (!p.alpha) continue;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.alpha *= Math.pow(p.alphaDecay, dt);
@@ -75,44 +117,36 @@ Particles.prototype.step = function (dt) {
     const slow = Math.pow(p.speedDecay, dt);
     p.vx *= slow;
     p.vy *= slow;
-    if (p.alpha >= ALPHA_DEAD) {
-      i++;
-      continue;
-    }
-    // Swap the last particle into this slot and look at the slot again.
-    this.list[i] = this.list[this.list.length - 1];
-    this.list.pop();
+    if (p.alpha < ALPHA_DEAD) p.alpha = 0;
   }
 };
 
 Particles.prototype.draw = function (ctx) {
-  if (!this.list.length) return;
   const alpha = ctx.globalAlpha;
-  ctx.fillStyle = PARTICLE_COLOR;
-  for (let i = 0; i < this.list.length; i++) {
+  for (let i = 0; i < PARTICLES_MAX; i++) {
     const p = this.list[i];
+    if (!p.alpha) continue;
     ctx.globalAlpha = p.alpha;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.drawImage(this.dot, p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
   }
   ctx.globalAlpha = alpha;
 };
 
 Particles.prototype.clear = function () {
-  this.list.length = 0;
+  for (let i = 0; i < PARTICLES_MAX; i++) this.list[i].alpha = 0;
 };
 
 // Count is how many dots fan out and scale grows or shrinks them, both
-// defaulting to the standard burst.
+// defaulting to the standard burst. Scale also pulls smaller bursts in closer
+// to the center and slows their drift, so a small pop is a smaller copy of a big one.
 Particles.prototype.burst = function (cx, cy, cellSize, count = BURST_COUNT, scale = 1) {
   const base = Math.random() * Math.PI * 2;
   for (let i = 0; i < count; i++) {
     const angle = base + i * Math.PI * 2 / count + Particles.spread(BURST_ANGLE_JITTER);
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-    const start = BURST_START * (1 + Particles.spread(BURST_START_JITTER)) * cellSize;
-    const speed = BURST_SPEED * (1 + Particles.spread(BURST_SPEED_JITTER)) * cellSize;
+    const start = BURST_START * scale * (1 + Particles.spread(BURST_START_JITTER)) * cellSize;
+    const speed = BURST_SPEED * scale * (1 + Particles.spread(BURST_SPEED_JITTER)) * cellSize;
     const alpha = BURST_ALPHA + Particles.spread(BURST_ALPHA_JITTER);
     this.emit(
       cx + dx * start,
