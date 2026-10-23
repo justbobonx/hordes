@@ -233,6 +233,8 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.resets = 0;
     this.hintCount = 0;
     this.undoCount = 0;
+    this.tries = 0;
+    this.totalTime = 0;
     this.activeHexKey = null;
     this.lastHexKey = null;
     this.country = null;
@@ -329,6 +331,8 @@ Game.prototype.startOver = function () {
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
+  this.tries = 0;
+  this.totalTime = 0;
   this.clockOn = 0;
   this.storyQueue = [];
   this.storyAfter = null;
@@ -1229,6 +1233,7 @@ Game.prototype.onLevelExit = function (reason) {
 Game.prototype.finishIntro = function () {
   this.global.introDone = true;
   Save.writeGlobal(this.global);
+  this.wave = 1;
   this.country = Overmap.create(Date.now());
   Save.writeCountry(this.country);
   this.persistRun();
