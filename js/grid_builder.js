@@ -8,6 +8,7 @@ const THIN_CELL_WEIGHTS = {
   4: 1.0  
 };
 
+const CENTERED_AFFINITY_MAX = 1.5;
 const CENTERED_DEFAULT = 0.4;
 const TIGHT_DEFAULT = 0.6;
 const THIN_DEFAULT = 0.45;
@@ -516,9 +517,11 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   for (let i = 0; i < legal.length; i++) {
     const seat = legal[i];
     const affinity = near(seat.fr, seat.fc, midR, midC);
+    // Stretch middle preference so the center can outweigh a neutral spot.
+    const stretchedAffinity = affinity * CENTERED_AFFINITY_MAX;
     const flush = flushOf(seat);
     const noise = 0.6 + GridBuilder.rand() * 0.4;
-    seat.weight = ((1 - centered) + centered * affinity) * ((1 - tight) + tight * flush) * noise;
+    seat.weight = ((1 - centered) + centered * stretchedAffinity) * ((1 - tight) + tight * flush) * noise;
     if (seat.weight < 0.05) seat.weight = 0.05;
     total += seat.weight;
   }
