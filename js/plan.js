@@ -37,12 +37,13 @@ Plan.copy = function (plan) {
   if (centered !== centered) centered = CENTERED_DEFAULT;
   if (centered < 0) centered = 0;
   if (centered > 1) centered = 1;
-  let tight = plan.tight;
-  if (tight === undefined || tight === null || tight === "") tight = TIGHT_DEFAULT;
-  tight = +tight;
-  if (tight !== tight) tight = TIGHT_DEFAULT;
-  if (tight < 0) tight = 0;
-  if (tight > 1) tight = 1;
+  let flush = plan.flush;
+  if (flush === undefined || flush === null || flush === "") flush = plan.tight;
+  if (flush === undefined || flush === null || flush === "") flush = FLUSH_DEFAULT;
+  flush = +flush;
+  if (flush !== flush) flush = FLUSH_DEFAULT;
+  if (flush < 0) flush = 0;
+  if (flush > 1) flush = 1;
   let thin = plan.thin;
   if (thin === undefined || thin === null || thin === "") thin = THIN_DEFAULT;
   thin = +thin;
@@ -77,7 +78,7 @@ Plan.copy = function (plan) {
     stamps: stamps,
     open: openSeat,
     centered: centered,
-    tight: tight,
+    flush: flush,
     thin: thin,
     fuelChance: fuelChance,
     overlap: overlap,

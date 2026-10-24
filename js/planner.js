@@ -33,10 +33,10 @@ const EXTRAS = {
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin: 0 },
   2: { cols: 6, rows: 7, stamps: ["33"], open: "edge", thin: 0 },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner", centered: 0, tight:0, thin: 0 },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", centered: 0.5, tight:0, thin: 0 },
-  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", centered: 0.5, tight:0.5, thin: 0 },
-  6: { cols: 9, rows: 10, stamps: ["45", "51", "24"], open: "inner", centered: 0.3, tight:0.7, thin: .5 },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner", centered: 0, flush:0, thin: 0 },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", centered: 0.5, flush:0, thin: 0 },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", centered: 0.5, flush:0.5, thin: 0 },
+  6: { cols: 9, rows: 10, stamps: ["45", "51", "24"], open: "inner", centered: 0.3, flush:0.7, thin: .5 },
 };
 
 Planner.intro = function (step) {
@@ -133,7 +133,7 @@ Planner.offer = function (tier, wave) {
       stamps: stamps,
       open: "any",
       centered: Math.random(),
-      tight: Math.random(),
+      flush: Math.random(),
       thin: Math.random(),
       area: a,
       fuelChance: fuelChance,

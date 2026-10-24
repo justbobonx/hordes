@@ -112,7 +112,7 @@ Ui.prototype.paintHud = function (view) {
     let label = view.testPlan ? "TEST" : prefix + view.wave;
     if (view.plan) {
       const c = Math.round((+view.plan.centered || 0) * 100);
-      const f = Math.round((+view.plan.tight || 0) * 100);
+      const f = Math.round((+view.plan.flush || 0) * 100);
       const t = Math.round((+view.plan.thin || 0) * 100);
       const fuel = Math.round((+view.plan.fuelChance || 0) * 100);
       const ov = Math.round((+view.plan.overlap || 0) * 100);
@@ -182,13 +182,13 @@ Ui.prototype.makeCard = function (card, index) {
 
   const meta = document.createElement("div");
   meta.className = "plan-meta";
-  const tightPct = Math.round((+plan.tight || 0) * 100);
+  const flushPct = Math.round((+plan.flush || 0) * 100);
   const centeredPct = Math.round((+plan.centered || 0) * 100);
   const thinPct = Math.round((+plan.thin || 0) * 100);
   const fuelPct = Math.round((+plan.fuelChance || 0) * 100);
   const ovPct = Math.round((+plan.overlap || 0) * 100);
   const stPct = Math.round((+plan.stronger || 0) * 100);
-  let metaText = "Center:" + centeredPct + "  Flush:" + tightPct + "<br>"
+  let metaText = "Center:" + centeredPct + "  Flush:" + flushPct + "<br>"
     + "Trim:" + thinPct + "  Area:" + plan.area + "<br>"
     + "Fuel:" + fuelPct + "  Overlap:" + ovPct + "  Strong:" + stPct;
   meta.innerHTML = metaText;

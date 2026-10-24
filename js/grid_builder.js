@@ -10,7 +10,8 @@ const THIN_CELL_WEIGHTS = {
 
 const CENTERED_AFFINITY_MAX = 1.5;
 const CENTERED_DEFAULT = 0.4;
-const TIGHT_DEFAULT = 0.6;
+const FLUSH_SCORE_MAX = 1.5;
+const FLUSH_DEFAULT = 0.6;
 const THIN_DEFAULT = 0.45;
 const MIN_BLOB_SIZE = 3;
 
@@ -46,12 +47,13 @@ GridBuilder._build = function (plan) {
   if (centered !== centered) centered = CENTERED_DEFAULT;
   if (centered < 0) centered = 0;
   if (centered > 1) centered = 1;
-  let tight = plan.tight;
-  if (tight === undefined || tight === null || tight === "") tight = 0.5;
-  tight = +tight;
-  if (tight !== tight) tight = TIGHT_DEFAULT;
-  if (tight < 0) tight = 0;
-  if (tight > 1) tight = 1;
+  let flush = plan.flush;
+  if (flush === undefined || flush === null || flush === "") flush = plan.tight;
+  if (flush === undefined || flush === null || flush === "") flush = FLUSH_DEFAULT;
+  flush = +flush;
+  if (flush !== flush) flush = FLUSH_DEFAULT;
+  if (flush < 0) flush = 0;
+  if (flush > 1) flush = 1;
   let thin = plan.thin;
   if (thin === undefined || thin === null || thin === "") thin = 0.2;
   thin = +thin;
@@ -59,7 +61,7 @@ GridBuilder._build = function (plan) {
   if (thin < 0) thin = 0;
   if (thin > 1) thin = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
-    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
+    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
     if (!built) continue;
     GridBuilder.paintCities(built.grid, stamps.length);
     GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
@@ -68,7 +70,7 @@ GridBuilder._build = function (plan) {
     built.grid.dress();
     return built.grid;
   }
-  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, tight, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
+  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
   const grid = built ? built.grid : new Grid(rows, cols);
   if (!built) {
     const kind = stamps[0] || "33";
@@ -95,7 +97,7 @@ GridBuilder._build = function (plan) {
   return grid;
 };
 
-GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, fuelChance, overlap, stronger) {
+GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, fuelChance, overlap, stronger) {
   const grid = new Grid(rows, cols);
   const cover = [];
   const sole = [];
@@ -138,7 +140,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, tight, centered, f
     const canNew = left >= deficit + MIN_BLOB_SIZE;
     const wantNew = i > 0 && canNew && GridBuilder.rand() < 0.5;
     const stampId = nextId;
-    const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
+    const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, flush, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
     if (placed.fp) { placed.fp.boardId = pieces.length; pieces.push(placed.fp); }
     if (placed.spawned) nextBlob++;
@@ -316,7 +318,7 @@ GridBuilder.commitPiece = function (grid, cells, id, uniqueMinVal, strongN, join
   return { spawned: spawned, soleCells: soleCells };
 };
 
-GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, tight, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap) {
+GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, flush, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap) {
   const rows = grid.rows;
   const cols = grid.cols;
   const shape = Grid.STAMP_DEFINITIONS[kind];
@@ -519,9 +521,11 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     const affinity = near(seat.fr, seat.fc, midR, midC);
     // Stretch middle preference so the center can outweigh a neutral spot.
     const stretchedAffinity = affinity * CENTERED_AFFINITY_MAX;
-    const flush = flushOf(seat);
+    const flushScore = flushOf(seat);
+    // Stretch flush preference so a flush seat can outweigh a neutral spot.
+    const stretchedFlush = flushScore * FLUSH_SCORE_MAX;
     const noise = 0.6 + GridBuilder.rand() * 0.4;
-    seat.weight = ((1 - centered) + centered * stretchedAffinity) * ((1 - tight) + tight * flush) * noise;
+    seat.weight = ((1 - centered) + centered * stretchedAffinity) * ((1 - flush) + flush * stretchedFlush) * noise;
     if (seat.weight < 0.05) seat.weight = 0.05;
     total += seat.weight;
   }
