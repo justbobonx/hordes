@@ -1072,6 +1072,11 @@ Game.prototype.updateHud = function () {
     tally: tally,
     perfect: !!tally && this.perfect,
   });
+  // Days/status text can grow the bar after the last layout; refit if so.
+  if (this.mode === "level") {
+    const bot = this.ui.hudPad().bot;
+    if (bot !== this.layoutBot) this.layout();
+  }
 };
 
 Game.prototype.statusView = function () {

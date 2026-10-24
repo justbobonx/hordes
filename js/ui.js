@@ -1,5 +1,8 @@
 /** HUD, overlays, and DOM wiring. Game keeps board state. */
 
+// Fallback only when the bar is missing or display:none (height 0).
+const HUD_BOT_MIN = 72;
+
 function Ui() {
   this.canvas = document.getElementById("board");
   this.ctx = this.canvas.getContext("2d");
@@ -96,8 +99,9 @@ Ui.prototype.hudPad = function () {
     const h = Math.ceil(el.getBoundingClientRect().height);
     return h > 0 ? h : fallback;
   }
+  // Live bar height so a taller days/status row never clips the board.
   return {
-    bot: Math.max(72, barHeight(this.elHudBottom, 72)),
+    bot: barHeight(this.elHudBottom, HUD_BOT_MIN),
   };
 };
 

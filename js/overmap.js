@@ -79,10 +79,6 @@ Overmap.dist = function (a, b) {
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
 };
 
-Overmap.planSeed = function (countrySeed, q, r) {
-  return (countrySeed ^ (q * 0x9e3779b1) ^ (r * 0x85ebca6b)) >>> 0;
-};
-
 Overmap.components = function (map) {
   const seen = {};
   const comps = [];
@@ -260,7 +256,7 @@ Overmap.generate = function (seed, targetCount, startWave) {
       h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
       if (h.plan) {
         h.plan.wave = wave;
-        h.plan.seed = Overmap.planSeed(countrySeed, h.q, h.r);
+        h.plan.seed = (Math.random() * 0x100000000) >>> 0;
       }
       country.nextWave = wave + 1;
     }
@@ -359,7 +355,7 @@ Overmap.advance = function (country) {
       h.plan = cards[0] ? Plan.copy(cards[0].plan) : Plan.blank();
       if (h.plan) {
         h.plan.wave = wave;
-        h.plan.seed = Overmap.planSeed(country.seed || 0, h.q, h.r);
+        h.plan.seed = (Math.random() * 0x100000000) >>> 0;
       }
       h.wave = wave;
       country.nextWave = wave + 1;

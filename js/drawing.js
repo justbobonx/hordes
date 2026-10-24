@@ -29,6 +29,7 @@ Game.prototype.layout = function () {
     rows: rows,
     cols: cols,
   };
+  this.layoutBot = pad.bot;
   this.layoutTray();
 };
 
