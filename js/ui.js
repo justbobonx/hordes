@@ -1,7 +1,8 @@
 /** HUD, overlays, and DOM wiring. Game keeps board state. */
 
 // Fallback only when the bar is missing or display:none (height 0).
-const HUD_BOT_MIN = 72;
+// Mobile bar height is auto; desktop stays ~72. Live layout reads the real height.
+const HUD_BOT_MIN = 56;
 
 function Ui() {
   this.canvas = document.getElementById("board");

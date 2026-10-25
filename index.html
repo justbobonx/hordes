@@ -27,11 +27,26 @@
     </div>
 
     <div id="map-hud-top" class="map-hud" hidden>
-      <span id="map-infected">INFECTED 0</span>
-      <span id="map-time">DAY 0</span>
-      <span id="map-clears">CLEARS 0</span>
-      <span id="map-tries">TRIES 0</span>
-      <span id="map-total-time">TIME 0:00</span>
+      <div class="map-stat">
+        <span class="map-stat-label">INFECTED</span>
+        <span id="map-infected" class="map-stat-value">0</span>
+      </div>
+      <div class="map-stat">
+        <span class="map-stat-label">DAY</span>
+        <span id="map-time" class="map-stat-value">0</span>
+      </div>
+      <div class="map-stat">
+        <span class="map-stat-label">CLEARS</span>
+        <span id="map-clears" class="map-stat-value">0</span>
+      </div>
+      <div class="map-stat">
+        <span class="map-stat-label">TRIES</span>
+        <span id="map-tries" class="map-stat-value">0</span>
+      </div>
+      <div class="map-stat">
+        <span class="map-stat-label">TIME</span>
+        <span id="map-total-time" class="map-stat-value">0:00</span>
+      </div>
     </div>
     <div id="map-hud-bottom" class="map-hud" hidden>
       <button id="btn-map-menu" type="button">BACK</button>

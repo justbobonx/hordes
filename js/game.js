@@ -33,9 +33,15 @@ const TOAST_FADE_IN = 0.15;
 const TOAST_HOLD = 1.8;
 const TOAST_FADE_OUT = 0.4;
 const TOAST_Y_FRAC = 0.35;
-const TOAST_FONT_PX = 64;
-const TOAST_LINE_GAP = 8;
-const TOAST_OUTLINE = 4;
+// Font scales with board width, then shrinks to fit the longest line.
+const TOAST_FONT_FRAC = 0.10;
+const TOAST_FONT_MIN = 28;
+const TOAST_FONT_MAX = 64;
+const TOAST_WIDTH_FRAC = 0.92;
+const TOAST_OUTLINE_DIV = 16;
+const TOAST_OUTLINE_MIN = 1;
+const TOAST_GAP_DIV = 8;
+const TOAST_OUTLINE_ALPHA = 0.2;
 const TOAST_COLOR_BLUE = "#8eb0f0";
 const TOAST_COLOR_GREEN = "#a8e0a0";
 const TOAST_COLOR_RED = "#f09090";
@@ -261,6 +267,7 @@ Game.prototype.returnToStart = function () {
   this.clearHold();
   this.preview = null;
   this.particles.clear();
+  this.clearToast();
   this.grid = null;
   this.plan = null;
   this.ended = null;
@@ -511,6 +518,7 @@ Game.prototype.onPlan = function (card) {
 
 Game.prototype.beginWave = function (plan) {
   this.abortActions();
+  this.clearToast();
   this.setMode("level");
   this.ui.hidePlan();
   this.ui.hideStory();
@@ -1093,10 +1101,7 @@ Game.prototype.updateHud = function () {
     perfect: !!tally && this.perfect,
   });
   if (this.mode === "level") this.syncToast(status);
-  else {
-    this.toast = null;
-    this.toastKey = "";
-  }
+  else this.clearToast();
 };
 
 Game.prototype.statusView = function () {
@@ -1221,6 +1226,12 @@ Game.prototype.dismissToast = function () {
   cur.outFrom = cur.alpha > 0 ? cur.alpha : 1;
 };
 
+// Drop toast immediately (no fade); use when leaving the level board.
+Game.prototype.clearToast = function () {
+  this.toast = null;
+  this.toastKey = "";
+};
+
 Game.prototype.pauseClock = function () {
   if (!this.clockOn) return;
   this.elapsedMs += Date.now() - this.clockOn;
@@ -1277,6 +1288,7 @@ Game.prototype.persist = function () {
 };
 
 Game.prototype.setMode = function (mode) {
+  const wasLevel = this.mode === "level";
   this.mode = mode;
   const board = this.ui.canvas;
   const map = this.mapView.canvas;
@@ -1285,6 +1297,8 @@ Game.prototype.setMode = function (mode) {
   const levelHud = document.getElementById("hud-bottom");
   const isMap = mode === "map";
   const isLevel = mode === "level";
+  // Sticky end-of-level toast must not freeze across overmap / next level.
+  if (wasLevel && !isLevel) this.clearToast();
   if (board) board.classList.toggle("inactive", !isLevel);
   if (map) map.classList.toggle("active", isMap);
   if (mapTop) mapTop.hidden = !isMap;
@@ -1410,6 +1424,7 @@ Game.prototype.onLevelExit = function (reason) {
   this.grid = null;
   this.ended = null;
   this.plan = null;
+  this.clearToast();
   this.setMode("map");
 };
 
@@ -1430,11 +1445,11 @@ Game.prototype.updateMapHud = function () {
   const elC = document.getElementById("map-clears");
   const elTries = document.getElementById("map-tries");
   const elTime = document.getElementById("map-total-time");
-  if (elI) elI.textContent = "INFECTED " + Overmap.infectedCount(this.country) + "/" + Overmap.hexCount(this.country);
-  if (elT) elT.textContent = "DAY " + (this.country.time | 0);
-  if (elC) elC.textContent = "CLEARS " + (this.country.clears | 0);
-  if (elTries) elTries.textContent = "TRIES " + (this.tries | 0);
-  if (elTime) elTime.textContent = "TIME " + this.formatTime(this.totalTime | 0);
+  if (elI) elI.textContent = Overmap.infectedCount(this.country) + "/" + Overmap.hexCount(this.country);
+  if (elT) elT.textContent = String(this.country.time | 0);
+  if (elC) elC.textContent = String(this.country.clears | 0);
+  if (elTries) elTries.textContent = String(this.tries | 0);
+  if (elTime) elTime.textContent = this.formatTime(this.totalTime | 0);
   const elStatus = document.getElementById("map-status");
   if (elStatus) {
     let status = "";

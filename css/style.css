@@ -270,21 +270,35 @@ h1 {
 
 @media (max-width: 800px) {
   #hud-bottom {
-    justify-content: flex-start;
-    padding-left: 6px;
-    padding-right: 6px;
-    align-items: center;
-    height: 72px;
-    min-height: 72px;
-    max-height: 72px;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: stretch;
+    gap: 4px;
+    padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
   }
   .hud-left {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
     font-size: 24px;
+    text-align: center;
+  }
+  #level-tally {
+    white-space: nowrap;
   }
   .hud-right {
     flex: 0 0 auto;
-    justify-content: flex-end;
-    margin-left: auto;
+    justify-content: center;
+    margin-left: 0;
+    width: 100%;
   }
   button {
     font-size: 22px;
@@ -319,6 +333,7 @@ h1 {
   letter-spacing: 1px;
   padding: 6px 10px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-around;
   align-items: center;
 }
@@ -327,6 +342,30 @@ h1 {
   top: 0;
   border-bottom-width: 2px;
   padding-top: calc(6px + env(safe-area-inset-top));
+  flex-wrap: wrap;
+  justify-content: space-around;
+  align-items: flex-start;
+  gap: 4px 8px;
+}
+
+.map-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+  line-height: 1.05;
+}
+
+.map-stat-label {
+  font-size: 16px;
+  color: #c9d2b8;
+  letter-spacing: 1px;
+}
+
+.map-stat-value {
+  font-size: 26px;
+  letter-spacing: 1px;
 }
 
 #map-hud-bottom {

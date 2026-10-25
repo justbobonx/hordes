@@ -159,16 +159,27 @@ Game.prototype.drawToast = function (ctx) {
   const o = this.origin;
   if (!o) return;
   const lines = toast.text.split("\n");
-  const fontPx = TOAST_FONT_PX;
-  const lineH = fontPx;
-  const gap = TOAST_LINE_GAP;
-  const totalH = lines.length * lineH + Math.max(0, lines.length - 1) * gap;
+  const boardW = o.cols * o.cell;
   const boardH = o.rows * o.cell;
-  const cx = o.x + (o.cols * o.cell) / 2;
+  let fontPx = Math.max(TOAST_FONT_MIN, Math.min(TOAST_FONT_MAX, boardW * TOAST_FONT_FRAC));
+  ctx.save();
+  ctx.font = fontPx + "px m5x7, monospace";
+  let longest = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const w = ctx.measureText(lines[i]).width;
+    if (w > longest) longest = w;
+  }
+  const maxW = boardW * TOAST_WIDTH_FRAC;
+  if (longest > maxW && longest > 0) {
+    fontPx = Math.max(TOAST_FONT_MIN, fontPx * (maxW / longest));
+  }
+  const gap = fontPx / TOAST_GAP_DIV;
+  const outline = Math.max(TOAST_OUTLINE_MIN, Math.round(fontPx / TOAST_OUTLINE_DIV));
+  const lineH = fontPx;
+  const totalH = lines.length * lineH + Math.max(0, lines.length - 1) * gap;
+  const cx = o.x + boardW / 2;
   const cy = o.y + boardH * TOAST_Y_FRAC;
   const y0 = cy - totalH / 2 + lineH / 2;
-  const outline = TOAST_OUTLINE;
-  ctx.save();
   ctx.globalAlpha = toast.alpha;
   ctx.font = fontPx + "px m5x7, monospace";
   ctx.textAlign = "center";
@@ -177,7 +188,7 @@ Game.prototype.drawToast = function (ctx) {
     const x = cx;
     const y = y0 + i * (lineH + gap);
     ctx.fillStyle = "#000000";
-    ctx.globalAlpha = toast.alpha * 0.15;
+    ctx.globalAlpha = toast.alpha * TOAST_OUTLINE_ALPHA;
     for (let dy = -outline; dy <= outline; dy++) {
       for (let dx = -outline; dx <= outline; dx++) {
         if (dx === 0 && dy === 0) continue;
