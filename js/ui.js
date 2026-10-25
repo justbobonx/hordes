@@ -99,7 +99,7 @@ Ui.prototype.hudPad = function () {
     const h = Math.ceil(el.getBoundingClientRect().height);
     return h > 0 ? h : fallback;
   }
-  // Live bar height so a taller days/status row never clips the board.
+  // Fixed bottom bar; fallback only if the node is hidden.
   return {
     bot: barHeight(this.elHudBottom, HUD_BOT_MIN),
   };
@@ -109,23 +109,7 @@ Ui.prototype.paintHud = function (view) {
   if (this.elWave) {
     let prefix = "WAVE ";
     if (view.isTutorial) prefix = "TUTORIAL ";
-    let label = view.testPlan ? "TEST" : prefix + view.wave;
-    if (view.plan) {
-      const c = Math.round((+view.plan.centered || 0) * 100);
-      const f = Math.round((+view.plan.flush || 0) * 100);
-      const t = Math.round((+view.plan.thin || 0) * 100);
-      const fuel = Math.round((+view.plan.fuelChance || 0) * 100);
-      const ov = Math.round((+view.plan.overlap || 0) * 100);
-      const st = Math.round((+view.plan.stronger || 0) * 100);      
-      const pad = function (n) { return (n < 10 ? "0" : "") + n; };
-      
-      label += "<br>(C:" + pad(c) + ",F:" + pad(f) + ",T:" + pad(t);
-      label += ",A:" + view.plan.area;
-      label += "  F:" + fuel;
-      label += ",O:" + pad(ov) + ",S:" + pad(st);
-      label += ")";
-    }
-    this.elWave.innerHTML = label;
+    this.elWave.textContent = view.testPlan ? "TEST" : prefix + view.wave;
   }
   if (this.elTally) this.elTally.textContent = view.tally;
   if (this.elPerfect) this.elPerfect.hidden = !view.perfect;
@@ -136,17 +120,12 @@ Ui.prototype.paintHud = function (view) {
   if (this.btnBack) this.btnBack.hidden = !!view.hideBack;
 };
 
-Ui.prototype.paintStatus = function (view) {
+// Level status lives on the canvas toast; keep the bar slot empty.
+Ui.prototype.paintStatus = function () {
   if (!this.elStatus) return;
-  const text = view.statusText || "";
-  if (text.indexOf("\n") >= 0) {
-    this.elStatus.innerHTML = text.replace(/\n/g, "<br>");
-    this.elStatus.style.whiteSpace = "normal";
-  } else {
-    this.elStatus.textContent = text;
-    this.elStatus.style.whiteSpace = "";
-  }
-  this.elStatus.className = view.statusClass || "";
+  this.elStatus.textContent = "";
+  this.elStatus.className = "";
+  this.elStatus.style.whiteSpace = "";
 };
 
 Ui.prototype.paintPlans = function (cards) {

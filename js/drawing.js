@@ -120,6 +120,75 @@ Game.prototype.draw = function (dt) {
   }
   this.particles.step(dt);
   this.particles.draw(ctx);
+  this.stepToast(dt);
+  this.drawToast(ctx);
+};
+
+Game.prototype.stepToast = function (dt) {
+  const toast = this.toast;
+  if (!toast || toast.done) return;
+  toast.t += dt;
+  if (toast.phase === "in") {
+    toast.alpha = Math.min(1, toast.t / TOAST_FADE_IN);
+    if (toast.t >= TOAST_FADE_IN) {
+      toast.phase = "hold";
+      toast.t = 0;
+      toast.alpha = 1;
+    }
+  } else if (toast.phase === "hold") {
+    toast.alpha = 1;
+    if (!toast.sticky && toast.t >= TOAST_HOLD) {
+      toast.phase = "out";
+      toast.t = 0;
+      toast.outFrom = 1;
+    }
+  } else if (toast.phase === "out") {
+    const from = toast.outFrom != null ? toast.outFrom : 1;
+    toast.alpha = Math.max(0, from * (1 - toast.t / TOAST_FADE_OUT));
+    if (toast.t >= TOAST_FADE_OUT) {
+      toast.done = true;
+      toast.alpha = 0;
+      this.toast = null;
+    }
+  }
+};
+
+Game.prototype.drawToast = function (ctx) {
+  const toast = this.toast;
+  if (!toast || toast.done || toast.alpha <= 0) return;
+  const o = this.origin;
+  if (!o) return;
+  const lines = toast.text.split("\n");
+  const fontPx = TOAST_FONT_PX;
+  const lineH = fontPx;
+  const gap = TOAST_LINE_GAP;
+  const totalH = lines.length * lineH + Math.max(0, lines.length - 1) * gap;
+  const boardH = o.rows * o.cell;
+  const cx = o.x + (o.cols * o.cell) / 2;
+  const cy = o.y + boardH * TOAST_Y_FRAC;
+  const y0 = cy - totalH / 2 + lineH / 2;
+  const outline = TOAST_OUTLINE;
+  ctx.save();
+  ctx.globalAlpha = toast.alpha;
+  ctx.font = fontPx + "px m5x7, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i < lines.length; i++) {
+    const x = cx;
+    const y = y0 + i * (lineH + gap);
+    ctx.fillStyle = "#000000";
+    ctx.globalAlpha = toast.alpha * 0.15;
+    for (let dy = -outline; dy <= outline; dy++) {
+      for (let dx = -outline; dx <= outline; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        ctx.fillText(lines[i], x + dx, y + dy);
+      }
+    }
+    ctx.globalAlpha = toast.alpha;
+    ctx.fillStyle = toast.color;
+    ctx.fillText(lines[i], x, y);
+  }
+  ctx.restore();
 };
 
 Game.prototype.drawTray = function (ctx) {
