@@ -31,13 +31,13 @@ const SCORE_MAX_DAYS = 5;
 // Status toast over the board (seconds / layout / colors matching status-* CSS).
 const TOAST_FADE_IN = 0.15;
 const TOAST_HOLD = 1.8;
-const TOAST_FADE_OUT = 0.4;
+const TOAST_FADE_OUT = 0.3;
 const TOAST_Y_FRAC = 0.35;
 // Font scales with board width, then shrinks to fit the longest line.
-const TOAST_FONT_FRAC = 0.10;
+const TOAST_FONT_FRAC = 0.14;
 const TOAST_FONT_MIN = 28;
-const TOAST_FONT_MAX = 64;
-const TOAST_WIDTH_FRAC = 0.92;
+const TOAST_FONT_MAX = 96;
+const TOAST_WIDTH_FRAC = 0.95;
 const TOAST_OUTLINE_DIV = 16;
 const TOAST_OUTLINE_MIN = 1;
 const TOAST_GAP_DIV = 8;
@@ -1094,8 +1094,8 @@ Game.prototype.updateHud = function () {
     testPlan: !!this.testPlan,
     queue: this.queue,
     resetLabel: status.resetLabel,
-    hideHint: status.hideHint,
-    hideBack: status.hideBack,
+    canHint: status.canHint,
+    canBack: status.canBack,
     canUndo: this.undoStack.length > 0 && this.ended !== "win",
     tally: tally,
     perfect: !!tally && this.perfect,
@@ -1105,7 +1105,7 @@ Game.prototype.updateHud = function () {
 };
 
 Game.prototype.statusView = function () {
-  if (!this.grid) return { text: "", cls: "", sticky: false, resetLabel: "RESET", hideHint: false, hideBack: false };
+  if (!this.grid) return { text: "", cls: "", sticky: false, resetLabel: "RESET", canHint: true, canBack: true };
   const cities = this.grid.ruinedCount();
   const hordeGone = this.grid.redCount() === 0 && !this.lost;
   const piecesGone = this.queue.length === 0;
@@ -1120,7 +1120,7 @@ Game.prototype.statusView = function () {
     if (hordeGone && cities === 0) {
       const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
       const tries = 1 + this.resets;
-      text = "HORDE DESTROYED!\nTIME: " + this.formatTime(elapsed) + "   TRIES: " + tries;
+      text = "HORDE DESTROYED!\nTIME: " + this.formatTime(elapsed) + "  TRIES: " + tries;
       cls = "status-green";
     } else if (hordeGone && cities > 0) {
       text = cities + " CITIES DESTROYED!";
@@ -1139,8 +1139,8 @@ Game.prototype.statusView = function () {
     // End-of-level result holds until the status clears; mid-play city alerts time out.
     sticky: !!(piecesGone && text),
     resetLabel: resetLabel,
-    hideHint: piecesGone,
-    hideBack: this.ended === "win",
+    canHint: !piecesGone,
+    canBack: this.ended !== "win",
   };
 };
 

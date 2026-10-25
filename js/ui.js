@@ -115,10 +115,16 @@ Ui.prototype.paintHud = function (view) {
   if (this.elTally) this.elTally.textContent = view.tally;
   if (this.elPerfect) this.elPerfect.hidden = !view.perfect;
   this.paintStatus(view);
-  if (this.btnHint) this.btnHint.hidden = !!view.hideHint;
+  if (this.btnHint) {
+    this.btnHint.hidden = false;
+    this.btnHint.disabled = !view.canHint;
+  }
   if (this.btnUndo) this.btnUndo.disabled = !view.canUndo;
   if (this.btnReset) this.btnReset.textContent = view.resetLabel || "RESET";
-  if (this.btnBack) this.btnBack.hidden = !!view.hideBack;
+  if (this.btnBack) {
+    this.btnBack.hidden = false;
+    this.btnBack.disabled = !view.canBack;
+  }
 };
 
 // Level status lives on the canvas toast; keep the bar slot empty.
