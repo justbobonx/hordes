@@ -13,6 +13,9 @@ const STAGE_YELLOW = 1;
 const STAGE_ORANGE = 2;
 const STAGE_INFECTED = 3;
 
+// Whole days on the campaign clock come from this many mission hours.
+const MISSION_DAY_HOURS = 24;
+
 // generate pre-rolls advances until both floors are met and then any one stop is reached
 // (checked per whole advance, so may overshoot)
 const GEN_MIN_INFECTED = 9;
@@ -239,6 +242,7 @@ Overmap.generate = function (seed, targetCount, startWave) {
     const country = {
       seed: countrySeed,
       time: 0,
+      hourRemainder: 0,
       nextWave: startWave,
       hexes: hexes,
       clears: 0,
@@ -370,18 +374,17 @@ Overmap.create = function (seed) {
 };
 
 // Queue everything that happens on the map after a level: the clear on a
-// win, then a cool and an advance per day. Days are 1 + floor(stats.penalty)
-// (Game.penalty); a perfect win only clears and cools, so no day passes.
+// win, then a cool and an advance per whole day taken from the campaign clock.
+// Hours carry across levels; leftover after whole days stays on the country.
 // Steps play one at a time via Overmap.step and persist with the country, so
 // an interrupted run resumes.
 Overmap.endLevel = function (country, key, won, stats) {
   if (!country.pending) country.pending = [];
   if (won && key) country.pending.push({ type: "clear", key: key });
-  if (won && stats.perfect) {
-    country.pending.push({ type: "cool" });
-    return;
-  }
-  const days = 1 + Math.floor(stats.penalty);
+  const hours = stats && stats.hours > 0 ? stats.hours : 0;
+  const total = (country.hourRemainder || 0) + hours;
+  const days = Math.floor(total / MISSION_DAY_HOURS);
+  country.hourRemainder = total - days * MISSION_DAY_HOURS;
   for (let i = 0; i < days; i++) {
     country.pending.push({ type: "cool" });
     country.pending.push({ type: "advance" });

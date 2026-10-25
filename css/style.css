@@ -77,9 +77,6 @@ button, a { font-family: inherit; }
   justify-content: flex-end;
 }
 
-#tally-perfect { color: #f2e27a; }
-#tally-perfect[hidden] { display: none; }
-
 #status-msg.status-blue { color: #8eb0f0; }
 #status-msg.status-green { color: #a8e0a0; }
 #status-msg.status-red { color: #f09090; }
@@ -365,6 +362,13 @@ h1 {
 
 .map-stat-value {
   font-size: 26px;
+  letter-spacing: 1px;
+}
+
+.map-hours-extra {
+  margin-left: 4px;
+  font-size: 18px;
+  color: #f2e27a;
   letter-spacing: 1px;
 }
 

@@ -19,14 +19,14 @@ const BURST_CITY_SCALE = 0.75;
 // Longest frame step in seconds, so a stalled or hidden tab does not make the world jump.
 const FRAME_DT_MAX = 0.1;
 
-// Level penalty in days (Game.penalty): resets and undos grow by sqrt, each
-// hint costs HINT_LEVEL_DAYS spread over the level's pieces, capped per hint.
-const RESET_DAYS = 0.75;
-const UNDO_DAYS = 0.4;
-const HINT_LEVEL_DAYS = 3;
-const HINT_MAX_DAYS = 0.5;
-// Endless score: 100 at no penalty, 0 at this many penalty days.
-const SCORE_MAX_DAYS = 5;
+// Mission clock: each drop costs a slice of a day, scored in hours.
+// Perfect clears force exactly one day onto the campaign so ceil stacking cannot spill.
+// Day length is the shared mission-day constant declared with the overmap.
+const CSO_SDT_MULT = 1.5;
+const HINT_SDT_MULT = 3;
+// Endless score falls from 100 at one day to 0 at this many hours.
+const SCORE_ZERO_HOURS = 72;
+const MAP_LEFTOVER_HOURS_COLOR = "#f2e27a";
 
 // Status toast over the board (seconds / layout / colors matching status-* CSS).
 const TOAST_FADE_IN = 0.15;
@@ -45,6 +45,8 @@ const TOAST_OUTLINE_ALPHA = 0.2;
 const TOAST_COLOR_BLUE = "#8eb0f0";
 const TOAST_COLOR_GREEN = "#a8e0a0";
 const TOAST_COLOR_RED = "#f09090";
+const TOAST_COLOR_GOLD = "#f0e6a8";
+const TOAST_COLOR_ORANGE = "#e07a2f";
 
 function Game() {
   this.ui = new Ui();
@@ -68,6 +70,7 @@ function Game() {
   this.hintCount = 0;
   this.undoCount = 0;
   this.perfect = true;
+  this.missionHours = 0;
   this.tries = 0;
   this.totalTime = 0;
   this.storyQueue = [];
@@ -295,6 +298,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.hintCount = 0;
     this.undoCount = 0;
     this.perfect = true;
+    this.missionHours = 0;
     this.tries = 0;
     this.totalTime = 0;
     this.activeHexKey = null;
@@ -395,6 +399,7 @@ Game.prototype.startOver = function () {
   this.hintCount = 0;
   this.undoCount = 0;
   this.perfect = true;
+  this.missionHours = 0;
   this.tries = 0;
   this.totalTime = 0;
   this.clockOn = 0;
@@ -552,6 +557,7 @@ Game.prototype.beginWave = function (plan) {
   this.hintCount = 0;
   this.undoCount = 0;
   this.perfect = true;
+  this.missionHours = 0;
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -585,6 +591,7 @@ Game.prototype.restore = function (data) {
   if (!this.queue.length) this.rebuildQueue();
   this.plan = Plan.copy(data.plan);
   this.wave = data.wave || this.plan.wave || this.wave;
+  this.missionHours = data.missionHours > 0 ? data.missionHours : 0;
   this.lost = !!data.lost;
   this.ended = data.ended || null;
   this.testPlan = data.testPlan ? Plan.copy(data.testPlan) : this.testPlan;
@@ -758,6 +765,7 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
   this.pendingUndo = {
     piece: boardId,
     qIndex: qIndex,
+    hint: !!hint,
     row: row,
     col: col,
     types: this.grid.types(),
@@ -1018,19 +1026,25 @@ Game.prototype.diffUndo = function (types, strengths, oStrengths) {
 };
 
 Game.prototype.commitPendingUndo = function () {
-  if (!this.pendingUndo || !this.grid || this.ended === "win") {
+  if (!this.pendingUndo || !this.grid) {
     this.pendingUndo = null;
     return;
   }
   const changes = this.diffUndo(this.pendingUndo.types, this.pendingUndo.strengths, this.pendingUndo.oStrengths);
   if (changes.length) {
-    this.undoStack.push({
-      piece: this.pendingUndo.piece,
-      qIndex: this.pendingUndo.qIndex,
-      row: this.pendingUndo.row,
-      col: this.pendingUndo.col,
-      changeCells: changes,
-    });
+    // Charge even on the winning last drop; undo stack is only for mid-level.
+    const charged = this.chargeDrop(this.pendingUndo.qIndex, this.pendingUndo.hint);
+    if (this.ended !== "win") {
+      this.undoStack.push({
+        piece: this.pendingUndo.piece,
+        qIndex: this.pendingUndo.qIndex,
+        row: this.pendingUndo.row,
+        col: this.pendingUndo.col,
+        changeCells: changes,
+        chargedHours: charged,
+        hint: !!this.pendingUndo.hint,
+      });
+    }
   }
   this.pendingUndo = null;
 };
@@ -1053,6 +1067,7 @@ Game.prototype.onUndo = function () {
   if (idx >= 0) this.used.splice(idx, 1);
   this.undoCount = (this.undoCount | 0) + 1;
   this.perfect = false;
+  this.refundDrop(rec);
   this.rebuildQueue();
   this.lost = this.grid.ruinedCount() > 0;
   if (this.ended === "lose") {
@@ -1068,37 +1083,70 @@ Game.prototype.onUndo = function () {
   this.updateHud();
 };
 
-// Days this level costs so far; both campaign days and the endless score read it.
-Game.prototype.penalty = function () {
-  return RESET_DAYS * Math.sqrt(this.resets | 0)
-    + (this.hintCount | 0) * Math.min(HINT_MAX_DAYS, HINT_LEVEL_DAYS / this.plan.stamps.length)
-    + UNDO_DAYS * Math.sqrt(this.undoCount | 0);
+// Hours one standard drop costs for this level's piece count.
+Game.prototype.sdt = function () {
+  const n = this.plan && this.plan.stamps ? this.plan.stamps.length : 1;
+  return Math.ceil(MISSION_DAY_HOURS / Math.max(1, n));
+};
+
+// Add drop cost to the level clock; returns hours charged.
+Game.prototype.chargeDrop = function (qIndex, hint) {
+  const sdt = this.sdt();
+  let charged;
+  if (hint) {
+    charged = HINT_SDT_MULT * sdt;
+    this.perfect = false;
+  } else if ((qIndex | 0) === 0) {
+    charged = sdt;
+  } else {
+    charged = CSO_SDT_MULT * sdt;
+    this.perfect = false;
+  }
+  this.missionHours = (this.missionHours || 0) + charged;
+  return charged;
+};
+
+// Undo returns the drop's hours; a hinted drop keeps its premium.
+Game.prototype.refundDrop = function (rec) {
+  if (!rec) return;
+  const refund = rec.hint ? this.sdt() : (rec.chargedHours || 0);
+  this.missionHours = Math.max(0, (this.missionHours || 0) - refund);
+};
+
+// Endless score from level hours; perfect stays above the formula cap.
+Game.prototype.endlessScore = function () {
+  if (this.perfect) return "100+";
+  const t = Math.max(0, Math.min(1, 1 - (this.missionHours || 0) / SCORE_ZERO_HOURS));
+  return String(Math.round(100 * t));
+};
+
+// Pad so the live tally digits do not jump as hours grow.
+Game.prototype.formatMissionClock = function (hours) {
+  const total = Math.max(0, Math.floor(hours || 0));
+  const days = Math.floor(total / MISSION_DAY_HOURS);
+  const hrs = total % MISSION_DAY_HOURS;
+  return "T+ " + String(days).padStart(2, " ") + "D " + String(hrs).padStart(2, " ") + "H";
+};
+
+// Hours handed to the overmap: perfect wins lock to one clean day.
+Game.prototype.levelExitHours = function (won) {
+  if (won && this.perfect) return MISSION_DAY_HOURS;
+  return this.missionHours || 0;
 };
 
 Game.prototype.updateHud = function () {
   const status = this.statusView();
-  // Live result: campaign days (a perfect win passes none), endless score.
   let tally = "";
   if (this.grid && this.plan && !this.isTutorial) {
-    if (this.gameMode === "campaign") {
-      // Whole days owed plus how far the penalty has crept toward the next one.
-      const penalty = this.perfect ? 0 : this.penalty();
-      const whole = Math.floor(penalty);
-            tally = "DAYS " + (this.perfect ? 0 : 1 + whole) + " +" + String(Math.floor((penalty - whole) * 100)).padStart(2, "0") + "%";
-    }
-    else tally = "SCORE " + (this.perfect ? "100+" : Math.round(100 * Math.max(0, 1 - this.penalty() / SCORE_MAX_DAYS)));
+    tally = this.formatMissionClock(this.missionHours);
   }
   this.ui.paintHud({
-    wave: this.plan ? this.plan.wave || this.wave : this.wave,
-    isTutorial: this.isTutorial,
-    testPlan: !!this.testPlan,
     queue: this.queue,
     resetLabel: status.resetLabel,
     canHint: status.canHint,
     canBack: status.canBack,
     canUndo: this.undoStack.length > 0 && this.ended !== "win",
     tally: tally,
-    perfect: !!tally && this.perfect,
   });
   if (this.mode === "level") this.syncToast(status);
   else this.clearToast();
@@ -1111,6 +1159,7 @@ Game.prototype.statusView = function () {
   const piecesGone = this.queue.length === 0;
   let text = "";
   let cls = "";
+  let lineColors = null;
   if (!piecesGone) {
     if (cities > 0) {
       text = cities + " CITIES DESTROYED!";
@@ -1120,8 +1169,28 @@ Game.prototype.statusView = function () {
     if (hordeGone && cities === 0) {
       const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
       const tries = 1 + this.resets;
-      text = "HORDE DESTROYED!\nTIME: " + this.formatTime(elapsed) + "  TRIES: " + tries;
+      const clock = this.formatMissionClock(this.levelExitHours(true));
+      const lines = [
+        "HORDE DESTROYED!",
+        "TIME: " + this.formatTime(elapsed) + "  TRIES: " + tries,
+        clock,
+      ];
+      const colors = [
+        TOAST_COLOR_GREEN,
+        TOAST_COLOR_GREEN,
+        TOAST_COLOR_ORANGE,
+      ];
+      if (this.gameMode === "endless") {
+        lines.push("SCORE " + this.endlessScore());
+        colors.push(TOAST_COLOR_GREEN);
+      }
+      if (this.perfect) {
+        lines.push("PERFECT CLEAR!");
+        colors.push(TOAST_COLOR_GOLD);
+      }
+      text = lines.join("\n");
       cls = "status-green";
+      lineColors = colors;
     } else if (hordeGone && cities > 0) {
       text = cities + " CITIES DESTROYED!";
       cls = "status-red";
@@ -1136,6 +1205,7 @@ Game.prototype.statusView = function () {
   return {
     text: text,
     cls: cls,
+    lineColors: lineColors,
     // End-of-level result holds until the status clears; mid-play city alerts time out.
     sticky: !!(piecesGone && text),
     resetLabel: resetLabel,
@@ -1155,8 +1225,9 @@ Game.prototype.toastColor = function (cls) {
 Game.prototype.syncToast = function (status) {
   const text = status && status.text ? status.text : "";
   const color = text ? this.toastColor(status.cls) : "";
+  const lineColors = status && status.lineColors ? status.lineColors : null;
   const sticky = !!(status && status.sticky);
-  const key = text ? text + "\0" + color + "\0" + (sticky ? "1" : "0") : "";
+  const key = text ? text + "\0" + color + "\0" + (lineColors ? lineColors.join(",") : "") + "\0" + (sticky ? "1" : "0") : "";
   if (!text) {
     this.toastKey = "";
     this.dismissToast();
@@ -1171,6 +1242,7 @@ Game.prototype.syncToast = function (status) {
   this.toast = {
     text: text,
     color: color,
+    lineColors: lineColors,
     sticky: sticky,
     phase: "in",
     t: 0,
@@ -1280,6 +1352,7 @@ Game.prototype.persist = function () {
     used: this.used.slice(),
     plan: this.plan,
     wave: this.wave,
+    missionHours: this.missionHours || 0,
     lost: this.lost,
     ended: this.ended,
     testPlan: this.testPlan,
@@ -1408,12 +1481,16 @@ Game.prototype.onLevelExit = function (reason) {
   }
   // campaign: Overmap queues the clear and the days; the map view plays them.
   const key = this.activeHexKey;
-  Overmap.endLevel(this.country, key, reason === "win", { penalty: this.penalty(), perfect: this.perfect });
+  Overmap.endLevel(this.country, key, reason === "win", {
+    hours: this.levelExitHours(reason === "win"),
+    perfect: this.perfect,
+  });
   Save.writeCountry(this.country);
   this.resets = 0;
   this.hintCount = 0;
   this.undoCount = 0;
   this.perfect = true;
+  this.missionHours = 0;
   this.tries = (this.tries | 0) + 1;
   this.totalTime = (this.totalTime | 0) + this.elapsedMs;
   this.activeHexKey = null;
@@ -1447,6 +1524,12 @@ Game.prototype.updateMapHud = function () {
   const elTime = document.getElementById("map-total-time");
   if (elI) elI.textContent = Overmap.infectedCount(this.country) + "/" + Overmap.hexCount(this.country);
   if (elT) elT.textContent = String(this.country.time | 0);
+  const elH = document.getElementById("map-hours-extra");
+  if (elH) {
+    const rem = Math.floor(this.country.hourRemainder || 0);
+    elH.textContent = rem > 0 ? "+" + rem + "H" : "";
+    elH.style.color = MAP_LEFTOVER_HOURS_COLOR;
+  }
   if (elC) elC.textContent = String(this.country.clears | 0);
   if (elTries) elTries.textContent = String(this.tries | 0);
   if (elTime) elTime.textContent = this.formatTime(this.totalTime | 0);

@@ -196,7 +196,7 @@ Game.prototype.drawToast = function (ctx) {
       }
     }
     ctx.globalAlpha = toast.alpha;
-    ctx.fillStyle = toast.color;
+    ctx.fillStyle = (toast.lineColors && toast.lineColors[i]) || toast.color;
     ctx.fillText(lines[i], x, y);
   }
   ctx.restore();

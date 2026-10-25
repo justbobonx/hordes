@@ -7,10 +7,8 @@ const HUD_BOT_MIN = 56;
 function Ui() {
   this.canvas = document.getElementById("board");
   this.ctx = this.canvas.getContext("2d");
-  this.elWave = document.getElementById("wave-label");
   this.elStatus = document.getElementById("status-msg");
   this.elTally = document.getElementById("tally-text");
-  this.elPerfect = document.getElementById("tally-perfect");
   this.elHudBottom = document.getElementById("hud-bottom");
   this.btnBack = document.getElementById("btn-back");
   this.btnUndo = document.getElementById("btn-undo");
@@ -107,13 +105,7 @@ Ui.prototype.hudPad = function () {
 };
 
 Ui.prototype.paintHud = function (view) {
-  if (this.elWave) {
-    let prefix = "WAVE ";
-    if (view.isTutorial) prefix = "TUTORIAL ";
-    this.elWave.textContent = view.testPlan ? "TEST" : prefix + view.wave;
-  }
-  if (this.elTally) this.elTally.textContent = view.tally;
-  if (this.elPerfect) this.elPerfect.hidden = !view.perfect;
+  if (this.elTally) this.elTally.textContent = view.tally || "";
   this.paintStatus(view);
   if (this.btnHint) {
     this.btnHint.hidden = false;
