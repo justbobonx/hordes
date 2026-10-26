@@ -20,13 +20,11 @@ const BURST_CITY_SCALE = 0.75;
 const FRAME_DT_MAX = 0.1;
 
 // Mission clock: each drop costs a slice of a day, scored in hours.
-// Perfect clears force exactly one day onto the campaign so ceil stacking cannot spill.
 // Day length is the shared mission-day constant declared with the overmap.
 const CSO_SDT_MULT = 1.5;
 const HINT_SDT_MULT = 3;
 // Endless score falls from 100 at one day to 0 at this many hours.
 const SCORE_ZERO_HOURS = 72;
-const MAP_LEFTOVER_HOURS_COLOR = "#f2e27a";
 
 // Status toast over the board (seconds / layout / colors matching status-* CSS).
 const TOAST_FADE_IN = 0.15;
@@ -1086,7 +1084,7 @@ Game.prototype.onUndo = function () {
 // Hours one standard drop costs for this level's piece count.
 Game.prototype.sdt = function () {
   const n = this.plan && this.plan.stamps ? this.plan.stamps.length : 1;
-  return Math.ceil(MISSION_DAY_HOURS / Math.max(1, n));
+  return Math.floor(MISSION_DAY_HOURS / n);
 };
 
 // Add drop cost to the level clock; returns hours charged.
@@ -1128,9 +1126,8 @@ Game.prototype.formatMissionClock = function (hours) {
   return "T+ " + String(days).padStart(2, " ") + "D " + String(hrs).padStart(2, " ") + "H";
 };
 
-// Hours handed to the overmap: perfect wins lock to one clean day.
+// Hours handed to the overmap from this level's mission clock.
 Game.prototype.levelExitHours = function (won) {
-  if (won && this.perfect) return MISSION_DAY_HOURS;
   return this.missionHours || 0;
 };
 
@@ -1526,8 +1523,9 @@ Game.prototype.updateMapHud = function () {
   if (elT) elT.textContent = String(this.country.time | 0);
   const elH = document.getElementById("map-hours-extra");
   if (elH) {
+    const hide = this.country.mapFloat && this.country.mapFloat.hideHudLeftover;
     const rem = Math.floor(this.country.hourRemainder || 0);
-    elH.textContent = rem > 0 ? "+" + rem + "H" : "";
+    elH.textContent = (!hide && rem > 0) ? "+" + rem + "H" : "";
     elH.style.color = MAP_LEFTOVER_HOURS_COLOR;
   }
   if (elC) elC.textContent = String(this.country.clears | 0);

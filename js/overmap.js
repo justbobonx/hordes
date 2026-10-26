@@ -373,28 +373,59 @@ Overmap.create = function (seed) {
   return Overmap.generate(seed, 32, 1);
 };
 
-// Queue everything that happens on the map after a level: the clear on a
-// win, then a cool and an advance per whole day taken from the campaign clock.
+// Queue post-level map work: floating spend and leftover illustration, optional
+// clear on a win, then cool and advance once per whole day taken. A win with no
+// whole day still gets one cool after the clear so the cell can settle to safer.
 // Hours carry across levels; leftover after whole days stays on the country.
-// Steps play one at a time via Overmap.step and persist with the country, so
-// an interrupted run resumes.
+// Steps play one at a time and persist with the country so an interrupted run
+// resumes. Zero spend skips the floating sequence.
 Overmap.endLevel = function (country, key, won, stats) {
   if (!country.pending) country.pending = [];
-  if (won && key) country.pending.push({ type: "clear", key: key });
   const hours = stats && stats.hours > 0 ? stats.hours : 0;
-  const total = (country.hourRemainder || 0) + hours;
-  const days = Math.floor(total / MISSION_DAY_HOURS);
-  country.hourRemainder = total - days * MISSION_DAY_HOURS;
-  for (let i = 0; i < days; i++) {
-    country.pending.push({ type: "cool" });
-    country.pending.push({ type: "advance" });
+  const leftover = country.hourRemainder || 0;
+  if (hours === 0) {
+    if (won && key) {
+      country.pending.push({ type: "clear", key: key });
+      country.pending.push({ type: "cool" });
+    }
+    return;
   }
+  country.pending.push({ type: "illSpend", hours: hours });
+  if (leftover > 0) country.pending.push({ type: "illLeftover", hours: leftover });
+  country.pending.push({ type: "illMerge", spend: hours, leftover: leftover });
+  if (won && key) country.pending.push({ type: "clear", key: key });
+  const total = leftover + hours;
+  const days = Math.floor(total / MISSION_DAY_HOURS);
+  const rem = total - days * MISSION_DAY_HOURS;
+  if (days === 0) {
+    if (won) country.pending.push({ type: "cool" });
+  } else {
+    for (let i = 0; i < days; i++) {
+      country.pending.push({ type: "cool" });
+      country.pending.push({ type: "advance" });
+    }
+  }
+  country.pending.push({ type: "illPark", hours: rem });
 };
 
 // Apply the next queued step. Returns true while more steps remain.
 Overmap.step = function (country) {
   const s = country.pending && country.pending.shift();
-  if (s && s.type === "clear") {
+  if (s && s.type === "illSpend") {
+    country.mapFloat = { spend: s.hours, leftover: null, hideHudLeftover: false };
+  } else if (s && s.type === "illLeftover") {
+    if (!country.mapFloat) country.mapFloat = { spend: 0, leftover: null, hideHudLeftover: false };
+    country.mapFloat.leftover = s.hours;
+    country.mapFloat.hideHudLeftover = true;
+  } else if (s && s.type === "illMerge") {
+    const total = (s.spend || 0) + (s.leftover || 0);
+    const days = Math.floor(total / MISSION_DAY_HOURS);
+    country.hourRemainder = total - days * MISSION_DAY_HOURS;
+    country.mapFloat = { spend: total, leftover: null, hideHudLeftover: true };
+  } else if (s && s.type === "illPark") {
+    country.hourRemainder = s.hours || 0;
+    country.mapFloat = null;
+  } else if (s && s.type === "clear") {
     Overmap.clearInfected(country, s.key);
     country.clears = (country.clears | 0) + 1;
   } else if (s && s.type === "cool") {
@@ -402,6 +433,9 @@ Overmap.step = function (country) {
   } else if (s && s.type === "advance") {
     Overmap.advance(country);
     country.time = (country.time | 0) + 1;
+    if (country.mapFloat && country.mapFloat.spend != null) {
+      country.mapFloat.spend = Math.max(0, country.mapFloat.spend - MISSION_DAY_HOURS);
+    }
   }
   return Overmap.busy(country);
 };

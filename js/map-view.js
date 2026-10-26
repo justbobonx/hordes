@@ -1,9 +1,15 @@
 /** Campaign map canvas: layout, hit testing, and playing queued Overmap steps
  *  as tweens. Owns no rules; Overmap decides what each step does. */
 
-// Each queued step (clear, cool, advance) and its tween. Tween == step so the
-// next snapshot lands exactly as the previous tween finishes.
+// Each queued step (clear, cool, advance, illustration) and its tween.
+// Tween == step so the next snapshot lands exactly as the previous tween finishes.
 const MAP_STEP_MS = 450;
+// Floating post-level hour lines drawn under the map HUD.
+const MAP_SPEND_HOURS_COLOR = "#e07a2f";
+const MAP_LEFTOVER_HOURS_COLOR = "#f2e27a";
+const MAP_FLOAT_FONT = 34;
+const MAP_FLOAT_LINE_GAP = 2;
+const MAP_FLOAT_TOP_PAD = 8;
 
 function MapView(canvas, onStep) {
   this.canvas = canvas;
@@ -57,6 +63,38 @@ MapView.prototype.draw = function (country, highlightKey) {
     else this.fade = null;
   }
   MapDraw.render(this.ctx, country, this.layoutInfo, highlightKey, fade);
+  this.drawFloatHours(country);
+};
+
+// Mission-clock style with a leading plus for floating spend / merge lines.
+MapView.formatPlusClock = function (hours) {
+  const total = Math.max(0, Math.floor(hours || 0));
+  const days = Math.floor(total / MISSION_DAY_HOURS);
+  const hrs = total % MISSION_DAY_HOURS;
+  return "+ " + String(days).padStart(2, " ") + "D " + String(hrs).padStart(2, " ") + "H";
+};
+
+// Orange spend (or merged total) and optional yellow leftover under the HUD.
+MapView.prototype.drawFloatHours = function (country) {
+  const fl = country && country.mapFloat;
+  if (!fl || fl.spend == null || !this.ctx) return;
+  const ctx = this.ctx;
+  const topEl = document.getElementById("map-hud-top");
+  const top = topEl && !topEl.hidden ? topEl.getBoundingClientRect().bottom : 0;
+  const cx = window.innerWidth / 2;
+  let y = top + MAP_FLOAT_TOP_PAD + MAP_FLOAT_FONT / 2;
+  ctx.save();
+  ctx.font = MAP_FLOAT_FONT + "px m5x7, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = MAP_SPEND_HOURS_COLOR;
+  ctx.fillText(MapView.formatPlusClock(fl.spend), cx, y);
+  if (fl.leftover != null && fl.leftover > 0) {
+    y += MAP_FLOAT_FONT + MAP_FLOAT_LINE_GAP;
+    ctx.fillStyle = MAP_LEFTOVER_HOURS_COLOR;
+    ctx.fillText("+" + Math.floor(fl.leftover) + "H", cx, y);
+  }
+  ctx.restore();
 };
 
 MapView.prototype.hit = function (e) {
