@@ -1218,7 +1218,7 @@ Game.prototype.statusView = function () {
       ];
       if (this.gameMode === "endless") {
         lines.push("SCORE " + this.endlessScore());
-        colors.push(TOAST_COLOR_GREEN);
+        colors.push(this.endlessScoreColor());
       } else {
         lines.push(this.formatMissionClock(this.levelExitHours(true)));
         colors.push(TOAST_COLOR_ORANGE);
