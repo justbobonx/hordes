@@ -1105,10 +1105,10 @@ Game.prototype.onUndo = function () {
   this.updateHud();
 };
 
-// Base hours one standard drop costs for this level's piece count.
+// Base hours one standard drop costs for this level's piece count (kept fractional).
 Game.prototype.sdt = function () {
   const n = this.plan && this.plan.stamps ? this.plan.stamps.length : 1;
-  return Math.floor(MISSION_DAY_HOURS / n);
+  return MISSION_DAY_HOURS / Math.max(1, n);
 };
 
 // Current drop unit (shrinks on earned resets).
@@ -1143,7 +1143,7 @@ Game.prototype.refundDrop = function (rec) {
 };
 
 // Hours the endless score reads. Live HUD adds remaining tray at 1× sdtNow
-// (finish-perfect projection, floored like a real charge); end toast leaves that off.
+// (finish-perfect projection); end toast leaves that off. Display floors later.
 Game.prototype.endlessScoreHours = function (live) {
   let h = this.missionHours || 0;
   if (live) {
@@ -1189,7 +1189,7 @@ Game.prototype.formatMissionClock = function (hours) {
 
 // Hours handed to the overmap from this level's mission clock.
 Game.prototype.levelExitHours = function (won) {
-  return this.missionHours || 0;
+  return Math.round(this.missionHours || 0);
 };
 
 Game.prototype.updateHud = function () {

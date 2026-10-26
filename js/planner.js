@@ -25,7 +25,7 @@ const PIECE_TIERS = [
 const TIER_WAVES = [9, 13, 18, 24, 31];
 
 const EXTRAS = {
-  fuel: { onPlan: 0.6, range: [0.2, 0.5] },
+  fuel: { onPlan: 0.7, range: [0.2, 0.5] },  //.7 makes up for boards that roll no good fuel
   strength: { onPlan: 0.6 },
   // barrier
 };
@@ -33,9 +33,9 @@ const EXTRAS = {
 // Board area = stamp cells * uniform roll in [AREA_MULT_MIN, AREA_MULT_MAX].
 const AREA_MULT_MIN = 1.5;
 const AREA_MULT_MAX = 2.5;
-// Extra rows over cols (portrait); 0 is square.
-const GRID_DELTA_MIN = 0;
-const GRID_DELTA_MAX = 5;
+// Portrait aspect rows/cols; 1 is square, top end is the tallest boards.
+const ASPECT_MIN = 1;
+const ASPECT_MAX = 1.5;
 
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin: 0 },
@@ -114,14 +114,14 @@ Planner.offer = function (tier, wave) {
   const minC = maxW + 2;
   const minR = maxH + 2;
   if (area < minC * minR) area = minC * minR;
-  const delta = GRID_DELTA_MIN + ((Math.random() * (GRID_DELTA_MAX - GRID_DELTA_MIN + 1)) | 0);
-  let cols = Math.round((-delta + Math.sqrt(delta * delta + 4 * area)) / 2);
+  const aspect = ASPECT_MIN + Math.random() * (ASPECT_MAX - ASPECT_MIN);
+  let cols = Math.round(Math.sqrt(area / aspect));
   if (cols < minC) cols = minC;
-  let rows = cols + delta;
+  let rows = Math.round(cols * aspect);
   if (rows < minR) rows = minR;
   while (rows * cols < area) {
     cols++;
-    rows = cols + delta;
+    rows = Math.round(cols * aspect);
     if (rows < minR) rows = minR;
   }
   let overlap = 0;
