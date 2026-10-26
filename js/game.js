@@ -23,8 +23,14 @@ const FRAME_DT_MAX = 0.1;
 // Day length is the shared mission-day constant declared with the overmap.
 const CSO_SDT_MULT = 1.5;
 const HINT_SDT_MULT = 3;
-// Endless score: 100 at one mission day of hours, 0 at this many (all-hint).
-const SCORE_ZERO_HOURS = 72;
+// Fraction of a drop's charge kept on undo (refund the rest).
+const UNDO_KEEP = 0.4;
+// Full-tray reset multiplies sdtNow by this (scaled by placed/n).
+const RESET_SDT_FACTOR = 0.8;
+// Floor after mult × sdtNow.
+const CHARGE_MIN_HOURS = 1;
+// Endless score: 100 at one mission day, 0 at 24 + 96 hours.
+const SCORE_ZERO_HOURS = 120;
 
 // Status toast over the board (seconds / layout / colors matching status-* CSS).
 const TOAST_FADE_IN = 0.15;
@@ -69,6 +75,7 @@ function Game() {
   this.undoCount = 0;
   this.perfect = true;
   this.missionHours = 0;
+  this.sdtNow = 0;
   this.tries = 0;
   this.totalTime = 0;
   this.storyQueue = [];
@@ -297,6 +304,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.undoCount = 0;
     this.perfect = true;
     this.missionHours = 0;
+  this.sdtNow = 0;
     this.tries = 0;
     this.totalTime = 0;
     this.activeHexKey = null;
@@ -398,6 +406,7 @@ Game.prototype.startOver = function () {
   this.undoCount = 0;
   this.perfect = true;
   this.missionHours = 0;
+  this.sdtNow = 0;
   this.tries = 0;
   this.totalTime = 0;
   this.clockOn = 0;
@@ -556,6 +565,7 @@ Game.prototype.beginWave = function (plan) {
   this.undoCount = 0;
   this.perfect = true;
   this.missionHours = 0;
+  this.sdtNow = this.sdt();
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -590,6 +600,7 @@ Game.prototype.restore = function (data) {
   this.plan = Plan.copy(data.plan);
   this.wave = data.wave || this.plan.wave || this.wave;
   this.missionHours = data.missionHours > 0 ? data.missionHours : 0;
+  this.sdtNow = data.sdtNow > 0 ? data.sdtNow : this.sdt();
   this.lost = !!data.lost;
   this.ended = data.ended || null;
   this.testPlan = data.testPlan ? Plan.copy(data.testPlan) : this.testPlan;
@@ -636,6 +647,12 @@ Game.prototype.rebuildQueue = function () {
 Game.prototype.resetWave = function () {
   if (!this.grid || !this.initial) return;
   this.abortActions();
+  // Shrink sdtNow by tray progress before putting pieces back (blocks empty-tray cheat).
+  const n = this.plan && this.plan.stamps ? this.plan.stamps.length : 0;
+  const placed = this.used ? this.used.length : 0;
+  const progress = n > 0 ? placed / n : 0;
+  if (!(this.sdtNow > 0)) this.sdtNow = this.sdt();
+  this.sdtNow *= 1 - progress * (1 - RESET_SDT_FACTOR);
   this.grid.writeTypes(this.initial);
   if (this.initialStrength) this.restoreStrength(this.initialStrength);
   this.used = [];
@@ -647,6 +664,7 @@ Game.prototype.resetWave = function () {
   this.resets = (this.resets | 0) + 1;
   this.perfect = false;
   // do not zero elapsedMs — keep the figuring-out time
+  // do not zero missionHours — time spent on the level stays
   this.clockOn = Date.now();
   this.clearHold();
   this.preview = null;
@@ -1087,15 +1105,21 @@ Game.prototype.onUndo = function () {
   this.updateHud();
 };
 
-// Hours one standard drop costs for this level's piece count.
+// Base hours one standard drop costs for this level's piece count.
 Game.prototype.sdt = function () {
   const n = this.plan && this.plan.stamps ? this.plan.stamps.length : 1;
   return Math.floor(MISSION_DAY_HOURS / n);
 };
 
+// Current drop unit (shrinks on earned resets).
+Game.prototype.sdtNowValue = function () {
+  if (!(this.sdtNow > 0)) this.sdtNow = this.sdt();
+  return this.sdtNow;
+};
+
 // Add drop cost to the level clock; returns hours charged.
 Game.prototype.chargeDrop = function (qIndex, hint) {
-  const sdt = this.sdt();
+  const sdt = this.sdtNowValue();
   let charged;
   if (hint) {
     charged = HINT_SDT_MULT * sdt;
@@ -1106,30 +1130,33 @@ Game.prototype.chargeDrop = function (qIndex, hint) {
     charged = CSO_SDT_MULT * sdt;
     this.perfect = false;
   }
+  if (charged < CHARGE_MIN_HOURS) charged = CHARGE_MIN_HOURS;
   this.missionHours = (this.missionHours || 0) + charged;
   return charged;
 };
 
-// Undo returns the drop's hours; a hinted drop keeps its premium.
+// Undo refunds most of the drop; UNDO_KEEP stays on the clock.
 Game.prototype.refundDrop = function (rec) {
   if (!rec) return;
-  const refund = rec.hint ? this.sdt() : (rec.chargedHours || 0);
+  const refund = (rec.chargedHours || 0) * (1 - UNDO_KEEP);
   this.missionHours = Math.max(0, (this.missionHours || 0) - refund);
 };
 
-// Hours the endless score reads. Live HUD adds remaining tray at 1× SDT
-// (finish-perfect projection); end toast leaves that off.
+// Hours the endless score reads. Live HUD adds remaining tray at 1× sdtNow
+// (finish-perfect projection, floored like a real charge); end toast leaves that off.
 Game.prototype.endlessScoreHours = function (live) {
   let h = this.missionHours || 0;
   if (live) {
     const left = this.queue ? this.queue.length : 0;
-    h += left * this.sdt();
+    let unit = this.sdtNowValue();
+    if (unit < CHARGE_MIN_HOURS) unit = CHARGE_MIN_HOURS;
+    h += left * unit;
   }
   return h;
 };
 
 // Endless score from mission hours: 100 at one day, 0 at SCORE_ZERO_HOURS.
-// Perfect (including exact 24h piece counts like n=4) always gets the plus.
+// Plus only while the perfect flag is still set.
 Game.prototype.endlessScoreRaw = function (live) {
   const h = this.endlessScoreHours(live);
   const span = SCORE_ZERO_HOURS - MISSION_DAY_HOURS;
@@ -1139,14 +1166,13 @@ Game.prototype.endlessScoreRaw = function (live) {
 Game.prototype.endlessScore = function (live) {
   if (this.perfect) return "100+";
   const raw = this.endlessScoreRaw(live);
-  if (raw > 100) return "100+";
-  return String(Math.round(Math.max(0, raw)));
+  return String(Math.round(Math.max(0, Math.min(100, raw))));
 };
 
 // HUD tally color from perfect flag and score bands.
 Game.prototype.endlessScoreColor = function (live) {
   if (this.perfect) return TOAST_COLOR_GOLD;
-  const n = Math.round(Math.max(0, this.endlessScoreRaw(live)));
+  const n = Math.round(Math.max(0, Math.min(100, this.endlessScoreRaw(live))));
   if (n >= 80) return "#ffffff";
   if (n >= 65) return "#e8e475";
   if (n >= 50) return TOAST_COLOR_ORANGE;
@@ -1392,6 +1418,7 @@ Game.prototype.persist = function () {
     plan: this.plan,
     wave: this.wave,
     missionHours: this.missionHours || 0,
+    sdtNow: this.sdtNow || 0,
     lost: this.lost,
     ended: this.ended,
     testPlan: this.testPlan,
@@ -1530,6 +1557,7 @@ Game.prototype.onLevelExit = function (reason) {
   this.undoCount = 0;
   this.perfect = true;
   this.missionHours = 0;
+  this.sdtNow = 0;
   this.tries = (this.tries | 0) + 1;
   this.totalTime = (this.totalTime | 0) + this.elapsedMs;
   this.activeHexKey = null;
