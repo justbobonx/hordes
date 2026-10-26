@@ -16,7 +16,7 @@ const FLUSH_SCORE_MAX = 1.5;
 const FLUSH_DEFAULT = 0.6;
 const THIN_DEFAULT = 0.45;
 const MIN_BLOB_SIZE = 3;
-const CROP_PAD = 6;
+const CROP_PAD = 3;
 
 function GridBuilder() {}
 

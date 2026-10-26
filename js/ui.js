@@ -105,7 +105,10 @@ Ui.prototype.hudPad = function () {
 };
 
 Ui.prototype.paintHud = function (view) {
-  if (this.elTally) this.elTally.textContent = view.tally || "";
+  if (this.elTally) {
+    this.elTally.textContent = view.tally || "";
+    this.elTally.style.color = view.tallyColor || "";
+  }
   this.paintStatus(view);
   if (this.btnHint) {
     this.btnHint.hidden = false;

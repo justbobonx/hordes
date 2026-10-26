@@ -23,7 +23,7 @@ const FRAME_DT_MAX = 0.1;
 // Day length is the shared mission-day constant declared with the overmap.
 const CSO_SDT_MULT = 1.5;
 const HINT_SDT_MULT = 3;
-// Endless score falls from 100 at one day to 0 at this many hours.
+// Endless score: 100 at one mission day of hours, 0 at this many (all-hint).
 const SCORE_ZERO_HOURS = 72;
 
 // Status toast over the board (seconds / layout / colors matching status-* CSS).
@@ -1117,11 +1117,40 @@ Game.prototype.refundDrop = function (rec) {
   this.missionHours = Math.max(0, (this.missionHours || 0) - refund);
 };
 
-// Endless score from level hours; perfect stays above the formula cap.
-Game.prototype.endlessScore = function () {
+// Hours the endless score reads. Live HUD adds remaining tray at 1× SDT
+// (finish-perfect projection); end toast leaves that off.
+Game.prototype.endlessScoreHours = function (live) {
+  let h = this.missionHours || 0;
+  if (live) {
+    const left = this.queue ? this.queue.length : 0;
+    h += left * this.sdt();
+  }
+  return h;
+};
+
+// Endless score from mission hours: 100 at one day, 0 at SCORE_ZERO_HOURS.
+// Perfect (including exact 24h piece counts like n=4) always gets the plus.
+Game.prototype.endlessScoreRaw = function (live) {
+  const h = this.endlessScoreHours(live);
+  const span = SCORE_ZERO_HOURS - MISSION_DAY_HOURS;
+  return 100 * (1 - (h - MISSION_DAY_HOURS) / span);
+};
+
+Game.prototype.endlessScore = function (live) {
   if (this.perfect) return "100+";
-  const t = Math.max(0, Math.min(1, 1 - (this.missionHours || 0) / SCORE_ZERO_HOURS));
-  return String(Math.round(100 * t));
+  const raw = this.endlessScoreRaw(live);
+  if (raw > 100) return "100+";
+  return String(Math.round(Math.max(0, raw)));
+};
+
+// HUD tally color from perfect flag and score bands.
+Game.prototype.endlessScoreColor = function (live) {
+  if (this.perfect) return TOAST_COLOR_GOLD;
+  const n = Math.round(Math.max(0, this.endlessScoreRaw(live)));
+  if (n >= 80) return "#ffffff";
+  if (n >= 65) return "#e8e475";
+  if (n >= 50) return TOAST_COLOR_ORANGE;
+  return TOAST_COLOR_RED;
 };
 
 // Pad so the live tally digits do not jump as hours grow.
@@ -1140,8 +1169,14 @@ Game.prototype.levelExitHours = function (won) {
 Game.prototype.updateHud = function () {
   const status = this.statusView();
   let tally = "";
+  let tallyColor = "";
   if (this.grid && this.plan && !this.isTutorial) {
-    tally = this.formatMissionClock(this.missionHours);
+    if (this.gameMode === "endless") {
+      tally = this.endlessScore(true);
+      tallyColor = this.endlessScoreColor(true);
+    } else {
+      tally = this.formatMissionClock(this.missionHours);
+    }
   }
   this.ui.paintHud({
     queue: this.queue,
@@ -1150,6 +1185,7 @@ Game.prototype.updateHud = function () {
     canBack: status.canBack,
     canUndo: this.undoStack.length > 0 && this.ended !== "win",
     tally: tally,
+    tallyColor: tallyColor,
   });
   if (this.mode === "level") this.syncToast(status);
   else this.clearToast();
@@ -1172,20 +1208,20 @@ Game.prototype.statusView = function () {
     if (hordeGone && cities === 0) {
       const elapsed = this.elapsedMs + (this.clockOn ? Date.now() - this.clockOn : 0);
       const tries = 1 + this.resets;
-      const clock = this.formatMissionClock(this.levelExitHours(true));
       const lines = [
         "HORDE DESTROYED!",
         "TIME: " + this.formatTime(elapsed) + "  TRIES: " + tries,
-        clock,
       ];
       const colors = [
         TOAST_COLOR_GREEN,
         TOAST_COLOR_GREEN,
-        TOAST_COLOR_ORANGE,
       ];
       if (this.gameMode === "endless") {
         lines.push("SCORE " + this.endlessScore());
         colors.push(TOAST_COLOR_GREEN);
+      } else {
+        lines.push(this.formatMissionClock(this.levelExitHours(true)));
+        colors.push(TOAST_COLOR_ORANGE);
       }
       if (this.perfect) {
         lines.push("PERFECT CLEAR!");

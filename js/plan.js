@@ -51,11 +51,7 @@ Plan.copy = function (plan) {
   if (thin < 0) thin = 0;
   if (thin > 1) thin = 1;
   let area = plan.area;
-  if (area != null) {
-    area = area | 0;
-    if (area < 15) area = 15;
-    if (area > 20) area = 20;
-  }
+  if (area != null) area = area | 0;
   let fuelChance = plan.fuelChance;
   if (fuelChance == null || fuelChance !== fuelChance) fuelChance = 0;
   fuelChance = +fuelChance;
