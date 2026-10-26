@@ -780,6 +780,12 @@ Game.prototype.beginDrop = function (row, col, hint, qIndex) {
 };
 
 Game.prototype.onDown = function (e) {
+  // Win toast: any board tap finishes like Done; lose/retry stays button-only.
+  if (this.ended === "win") {
+    e.preventDefault();
+    this.onEnd();
+    return;
+  }
   if (!this.grid || this.ended || this.waiting()) return;
   if (this.ui.storyOpen() || this.ui.planOpen() || this.ui.startOpen()) return;
   e.preventDefault();

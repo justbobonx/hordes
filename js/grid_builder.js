@@ -8,12 +8,15 @@ const THIN_CELL_WEIGHTS = {
   4: 1.0  
 };
 
-const CENTERED_AFFINITY_MAX = 1.5;
+// Plan centered 0..1 maps onto this scoring range (0.25 stays neutral).
+const CENTERED_SCORE_MIN = -0.5;
+const CENTERED_SCORE_MAX = 1.5;
 const CENTERED_DEFAULT = 0.4;
 const FLUSH_SCORE_MAX = 1.5;
 const FLUSH_DEFAULT = 0.6;
 const THIN_DEFAULT = 0.45;
 const MIN_BLOB_SIZE = 3;
+const CROP_PAD = 6;
 
 function GridBuilder() {}
 
@@ -68,7 +71,7 @@ GridBuilder._build = function (plan) {
     GridBuilder.promote(built.grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
     built.grid.pieces = built.pieces || [];
     built.grid.dress();
-    return built.grid;
+    return GridBuilder.cropEmptyRim(built.grid, plan);
   }
   const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
   const grid = built ? built.grid : new Grid(rows, cols);
@@ -94,7 +97,7 @@ GridBuilder._build = function (plan) {
   }
   if (!built) GridBuilder.paintCities(grid, stamps.length);
   grid.dress();
-  return grid;
+  return GridBuilder.cropEmptyRim(grid, plan);
 };
 
 GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, fuelChance, overlap, stronger) {
@@ -519,13 +522,15 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
   for (let i = 0; i < legal.length; i++) {
     const seat = legal[i];
     const affinity = near(seat.fr, seat.fc, midR, midC);
-    // Stretch middle preference so the center can outweigh a neutral spot.
-    const stretchedAffinity = affinity * CENTERED_AFFINITY_MAX;
+    // Plan centered maps to signed strength; zero leaves seats flat, positive
+    // pulls middle, negative pulls rim.
+    const centerStrength = CENTERED_SCORE_MIN + centered * (CENTERED_SCORE_MAX - CENTERED_SCORE_MIN);
+    const centerTerm = 1 + centerStrength * (2 * affinity - 1);
     const flushScore = flushOf(seat);
     // Stretch flush preference so a flush seat can outweigh a neutral spot.
     const stretchedFlush = flushScore * FLUSH_SCORE_MAX;
     const noise = 0.6 + GridBuilder.rand() * 0.4;
-    seat.weight = ((1 - centered) + centered * stretchedAffinity) * ((1 - flush) + flush * stretchedFlush) * noise;
+    seat.weight = centerTerm * ((1 - flush) + flush * stretchedFlush) * noise;
     if (seat.weight < 0.05) seat.weight = 0.05;
     total += seat.weight;
   }
@@ -890,6 +895,94 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
       }
     }
   }
+};
+
+
+// Trim empty rim around packed hordes, then rebuild the board at the origin.
+GridBuilder.cropEmptyRim = function (grid, plan) {
+  if (!grid) return grid;
+  const pad = CROP_PAD;
+  const rows = grid.rows;
+  const cols = grid.cols;
+  let minR = rows;
+  let maxR = -1;
+  let minC = cols;
+  let maxC = -1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!grid.at(r, c).is("horde")) continue;
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+  }
+  if (maxR < 0) return grid;
+
+  let r0 = minR - pad;
+  let r1 = maxR + pad;
+  let c0 = minC - pad;
+  let c1 = maxC + pad;
+  if (r0 < 0) r0 = 0;
+  if (c0 < 0) c0 = 0;
+  if (r1 > rows - 1) r1 = rows - 1;
+  if (c1 > cols - 1) c1 = cols - 1;
+
+  const newRows = r1 - r0 + 1;
+  const newCols = c1 - c0 + 1;
+  if (newRows < 1 || newCols < 1) return grid;
+  if (r0 === 0 && c0 === 0 && newRows === rows && newCols === cols) return grid;
+
+  const next = new Grid(newRows, newCols);
+  for (let r = 0; r < newRows; r++) {
+    for (let c = 0; c < newCols; c++) {
+      const src = grid.at(r + r0, c + c0);
+      const dst = next.at(r, c);
+      dst.setType(src.type);
+      dst.seed = src.seed;
+      dst.phase = src.phase;
+      if (src.type === "horde") {
+        dst.strength = src.strength;
+        dst.oStrength = src.oStrength;
+      }
+    }
+  }
+
+  const pieces = grid.pieces || [];
+  next.pieces = [];
+  for (let i = 0; i < pieces.length; i++) {
+    const fp = pieces[i];
+    const cells = [];
+    const clipped = [];
+    for (let k = 0; k < fp.cells.length; k++) {
+      const nr = fp.cells[k].r - r0;
+      const nc = fp.cells[k].c - c0;
+      if (nr < 0 || nc < 0 || nr >= newRows || nc >= newCols) clipped.push({ r: nr, c: nc });
+      else cells.push({ r: nr, c: nc });
+    }
+    for (let k = 0; k < (fp.clippedCells || []).length; k++) {
+      clipped.push({ r: fp.clippedCells[k].r - r0, c: fp.clippedCells[k].c - c0 });
+    }
+    if (!cells.length) continue;
+    fp.cells = cells;
+    fp.clippedCells = clipped;
+    if (fp.anchor) {
+      fp.anchor = { r: fp.anchor.r - r0, c: fp.anchor.c - c0 };
+    }
+    if (fp.originAnchor) {
+      fp.originAnchor = { r: fp.originAnchor.r - r0, c: fp.originAnchor.c - c0 };
+    }
+    const raw = cells.concat(clipped);
+    fp.seating = Footprint.computeSeating(newRows, newCols, raw, cells);
+    next.pieces.push(fp);
+  }
+
+  if (plan) {
+    plan.rows = newRows;
+    plan.cols = newCols;
+  }
+  next.dress();
+  return next;
 };
 
 GridBuilder.shuffle = function (list) {

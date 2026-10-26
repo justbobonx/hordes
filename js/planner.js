@@ -30,6 +30,13 @@ const EXTRAS = {
   // barrier
 };
 
+// Board area = stamp cells * uniform roll in [AREA_MULT_MIN, AREA_MULT_MAX].
+const AREA_MULT_MIN = 1.5;
+const AREA_MULT_MAX = 2.5;
+// Extra rows over cols (portrait); 0 is square.
+const GRID_DELTA_MIN = 0;
+const GRID_DELTA_MAX = 5;
+
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin: 0 },
   2: { cols: 6, rows: 7, stamps: ["33"], open: "edge", thin: 0 },
@@ -101,13 +108,13 @@ Planner.offer = function (tier, wave) {
     if (3 > maxW) maxW = 3;
     if (3 > maxH) maxH = 3;
   }
-  const mult = 1.5 + Math.random() * 0.5;
+  const mult = AREA_MULT_MIN + Math.random() * (AREA_MULT_MAX - AREA_MULT_MIN);
   let area = cells * mult;
   const a = Math.round(mult * 10);
   const minC = maxW + 2;
   const minR = maxH + 2;
   if (area < minC * minR) area = minC * minR;
-  const delta = 1 + ((Math.random() * 3) | 0);
+  const delta = GRID_DELTA_MIN + ((Math.random() * (GRID_DELTA_MAX - GRID_DELTA_MIN + 1)) | 0);
   let cols = Math.round((-delta + Math.sqrt(delta * delta + 4 * area)) / 2);
   if (cols < minC) cols = minC;
   let rows = cols + delta;
