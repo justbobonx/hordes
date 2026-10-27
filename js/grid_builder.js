@@ -17,6 +17,9 @@ const FLUSH_DEFAULT = 0.6;
 const TRIM_DEFAULT = 0.45;
 const MIN_BLOB_SIZE = 3;
 const CROP_PAD = 3;
+// After pad, blank rim on each axis: at most this many cells total / on one side.
+const CROP_BLANK_TOTAL = 4;
+const CROP_BLANK_SIDE = 3;
 
 function GridBuilder() {}
 
@@ -898,7 +901,7 @@ GridBuilder.promote = function (grid, cover, stampsOn, strongCount, stronger) {
 };
 
 
-// Trim empty rim around packed hordes, then rebuild the board at the origin.
+// Crop empty rim around packed hordes (pad, then cap blank total/side), rebuild at origin.
 GridBuilder.cropEmptyRim = function (grid, plan) {
   if (!grid) return grid;
   const pad = CROP_PAD;
@@ -919,14 +922,30 @@ GridBuilder.cropEmptyRim = function (grid, plan) {
   }
   if (maxR < 0) return grid;
 
-  let r0 = minR - pad;
-  let r1 = maxR + pad;
-  let c0 = minC - pad;
-  let c1 = maxC + pad;
-  if (r0 < 0) r0 = 0;
-  if (c0 < 0) c0 = 0;
-  if (r1 > rows - 1) r1 = rows - 1;
-  if (c1 > cols - 1) c1 = cols - 1;
+  let top = minR < pad ? minR : pad;
+  let bot = (rows - 1 - maxR) < pad ? (rows - 1 - maxR) : pad;
+  let left = minC < pad ? minC : pad;
+  let right = (cols - 1 - maxC) < pad ? (cols - 1 - maxC) : pad;
+  function fitBlank(a, b) {
+    if (a > CROP_BLANK_SIDE) a = CROP_BLANK_SIDE;
+    if (b > CROP_BLANK_SIDE) b = CROP_BLANK_SIDE;
+    while (a + b > CROP_BLANK_TOTAL) {
+      if (a >= b && a > 0) a--;
+      else if (b > 0) b--;
+      else break;
+    }
+    return [a, b];
+  }
+  const rowPad = fitBlank(top, bot);
+  top = rowPad[0];
+  bot = rowPad[1];
+  const colPad = fitBlank(left, right);
+  left = colPad[0];
+  right = colPad[1];
+  const r0 = minR - top;
+  const r1 = maxR + bot;
+  const c0 = minC - left;
+  const c1 = maxC + right;
 
   const newRows = r1 - r0 + 1;
   const newCols = c1 - c0 + 1;
