@@ -18,6 +18,11 @@ const HORDE_INDENT_SHRINK = 0.28;
 const HORDE_INDENT_INSET = 0.12;
 const HORDE_INDENT_ALPHA = 0.15;
 
+// Min circular phase gap from each 4-way pulse neighbor (radians on the cycle).
+const PULSE_MIN_NEIGHBOR_SEP = Math.PI / 3;
+// How many random re-rolls when a pulse cell sits too close to a neighbor.
+const PULSE_PHASE_TRIES = 16;
+
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
@@ -67,7 +72,7 @@ function Cell(type) {
   this.outer = [true, true, true, true]; // top, right, bottom, left
   this.groupId = null;
   this.seed = (Math.random() * 0xffffffff) >>> 0;
-  this.phase = Math.random() * Math.PI * 2;
+  this.phase = Math.random() * Math.PI * 2; // random; dress may re-roll if too close to pulse neighbors
   this.strength = 1;
   this.oStrength = 1;
   this.dress();
@@ -109,6 +114,43 @@ Cell.sameGroup = function (grid, cell, row, col) {
   return (a === "city" || a === "ruined") && (b === "city" || b === "ruined");
 };
 
+function cellVariesPulse(cell) {
+  const look = CELL_TYPES[cell.type] || CELL_TYPES.grass;
+  return look.vary === "pulse";
+}
+
+// Keep phase if already clear of every neighbor; otherwise re-roll and keep the
+// candidate with the largest gap (stop early once the minimum is met).
+function phaseOffsyncFromNeighbors(phase, neighborPhases) {
+  const tau = Math.PI * 2;
+  if (neighborPhases.length === 0) return phase;
+
+  function minNeighborSep(p) {
+    let m = Infinity;
+    for (let i = 0; i < neighborPhases.length; i++) {
+      const d = Math.abs(p - neighborPhases[i]) % tau;
+      const s = Math.min(d, tau - d);
+      if (s < m) m = s;
+    }
+    return m;
+  }
+
+  let best = phase;
+  let bestSep = minNeighborSep(phase);
+  if (bestSep >= PULSE_MIN_NEIGHBOR_SEP) return best;
+
+  for (let t = 0; t < PULSE_PHASE_TRIES; t++) {
+    const cand = Math.random() * tau;
+    const sep = minNeighborSep(cand);
+    if (sep > bestSep) {
+      best = cand;
+      bestSep = sep;
+      if (bestSep >= PULSE_MIN_NEIGHBOR_SEP) break;
+    }
+  }
+  return best;
+}
+
 Cell.dressGrid = function (grid) {
   if (!grid) return;
   for (let r = 0; r < grid.rows; r++) {
@@ -128,6 +170,25 @@ Cell.dressGrid = function (grid) {
       cell.round = [!(up || left), !(up || right), !(down || right), !(down || left)];
       // top, right, bottom, left — outline only outer edges
       cell.outer = [!up, !right, !down, !left];
+    }
+  }
+
+  // One-shot: only re-roll pulse cells whose phase sits too close to a pulse neighbor.
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (let r = 0; r < grid.rows; r++) {
+    for (let c = 0; c < grid.cols; c++) {
+      const cell = grid.at(r, c);
+      if (!cell || !cellVariesPulse(cell)) continue;
+      const neighborPhases = [];
+      for (let d = 0; d < dirs.length; d++) {
+        const nr = r + dirs[d][0];
+        const nc = c + dirs[d][1];
+        if (nr < 0 || nc < 0 || nr >= grid.rows || nc >= grid.cols) continue;
+        const nb = grid.at(nr, nc);
+        if (!nb || !cellVariesPulse(nb)) continue;
+        neighborPhases.push(nb.phase);
+      }
+      cell.phase = phaseOffsyncFromNeighbors(cell.phase, neighborPhases);
     }
   }
 };
