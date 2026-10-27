@@ -16,6 +16,8 @@ const FLUSH_SCORE_MAX = 1.5;
 const FLUSH_DEFAULT = 0.6;
 const TRIM_DEFAULT = 0.45;
 const MIN_BLOB_SIZE = 3;
+// Chance to start a new blob when remaining stamps can finish small ones and still fill a new min blob.
+const NEW_BLOB_CHANCE = 0.5;
 const CROP_PAD = 3;
 // After pad, blank rim on each axis: at most this many cells total / on one side.
 const CROP_BLANK_TOTAL = 4;
@@ -133,18 +135,16 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, f
   let nextBlob = 0;
   let nextId = 0;
   for (let i = 0; i < stamps.length; i++) {
-    let small = false;
     let deficit = 0;
     for (let b = 0; b < blobSize.length; b++) {
       if (!blobSize[b]) continue;
-      if (blobSize[b] < MIN_BLOB_SIZE) {
-        small = true;
-        deficit += MIN_BLOB_SIZE - blobSize[b];
-      }
+      if (blobSize[b] < MIN_BLOB_SIZE) deficit += MIN_BLOB_SIZE - blobSize[b];
     }
     const left = stamps.length - i;
+    // Only force onto undersized blobs when every remaining stamp is needed to finish them.
+    const small = deficit > 0 && left === deficit;
     const canNew = left >= deficit + MIN_BLOB_SIZE;
-    const wantNew = i > 0 && canNew && GridBuilder.rand() < 0.5;
+    const wantNew = i > 0 && canNew && GridBuilder.rand() < NEW_BLOB_CHANCE;
     const stampId = nextId;
     const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, flush, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
@@ -433,7 +433,9 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       return;
     }
     if (wantNew) {
-      legal.push({ cells: cells, hits: grazes, join: grazes.length ? grazes[0] : nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
+      // True split only — no graze onto an existing blob.
+      if (grazes.length) return;
+      legal.push({ cells: cells, hits: [], join: nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
       return;
     }
     if (join < 0) return;
