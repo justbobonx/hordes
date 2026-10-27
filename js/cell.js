@@ -13,12 +13,17 @@ const STRENGTH_INSET_NEXT = 0.2;
 // Default seconds for one pulse-vary cycle; cell type may set vspeed to override.
 const PULSE_PERIOD_SEC = 4.0;
 
+// Indent cast on horde: shrink + left inset as fractions of drawn cell, then opacity.
+const HORDE_INDENT_SHRINK = 0.28;
+const HORDE_INDENT_INSET = 0.12;
+const HORDE_INDENT_ALPHA = 0.15;
+
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
   city: { fill: "#1665d3", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#92adc3" },
   //city: { fill: "#677592", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#41b441" },
-  horde: { fill: "#ab3229", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.18 },
+  horde: { fill: "#b7362c", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.165 },
   cleared: { fill: "#3f6242", mark: "#b8352c", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   cleared_hint: { fill: "#3f6242", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   ruined: { fill: "#3c4d72", mark: "#6e88ba", group: true, round: 1, vary: "group", varyAmount: 0.05 },
@@ -172,6 +177,14 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
     fill = varyColor(look.fill, 0, amount);
   }
   fillRounded(ctx, ix, iy, is, corners, fill);
+
+  // Smaller dark pad inside the cell: shrunk, then inset left and down.
+  if (this.type === "horde") {
+    const shrink = is * HORDE_INDENT_SHRINK;
+    const inset = is * HORDE_INDENT_INSET;
+    const pad = Math.max(1, is - shrink);
+    fillRounded(ctx, ix + inset, iy + shrink - inset, pad, corners, "rgba(96,0,0," + HORDE_INDENT_ALPHA + ")");
+  }
 
   if (look.outline && ctx.roundRect) {
     const lw = Math.min(4, Math.max(2, size * 0.11));

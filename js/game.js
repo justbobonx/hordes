@@ -21,7 +21,7 @@ const FRAME_DT_MAX = 0.1;
 
 // Mission clock: each drop costs a slice of a day, scored in hours.
 // Day length is the shared mission-day constant declared with the overmap.
-const CSO_SDT_MULT = 1.5;
+const CSO_SDT_MULT = 1.35;
 const HINT_SDT_MULT = 3;
 // Fraction of a drop's charge kept on undo (refund the rest).
 const UNDO_KEEP = 0.4;
