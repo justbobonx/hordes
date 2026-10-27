@@ -1323,7 +1323,7 @@ Game.prototype.planDebugText = function () {
   if (!p) return "";
   const pct = function (v) { return Math.round((+v || 0) * 100); };
   const pad = function (n) { return (n < 10 ? "0" : "") + n; };
-  return "(C:" + pad(pct(p.centered)) + ",F:" + pad(pct(p.flush)) + ",T:" + pad(pct(p.trim)) +
+  return "(C:" + pad(pct(p.centered)) + ",F:" + pad(pct(p.flush)) + ",R:" + pad(pct(p.rejoin)) + ", T:" + pad(pct(p.trim)) +
     ",A:" + p.area + "  F:" + pct(p.fuelChance) +
     ",O:" + pad(pct(p.overlap)) + ",S:" + pad(pct(p.stronger)) + ")";
 };

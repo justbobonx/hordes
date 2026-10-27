@@ -165,11 +165,12 @@ Ui.prototype.makeCard = function (card, index) {
   meta.className = "plan-meta";
   const flushPct = Math.round((+plan.flush || 0) * 100);
   const centeredPct = Math.round((+plan.centered || 0) * 100);
+  const rejoinPct = Math.round((+plan.rejoin || 0) * 100);
   const trimPct = Math.round((+plan.trim || 0) * 100);
   const fuelPct = Math.round((+plan.fuelChance || 0) * 100);
   const ovPct = Math.round((+plan.overlap || 0) * 100);
   const stPct = Math.round((+plan.stronger || 0) * 100);
-  let metaText = "Center:" + centeredPct + "  Flush:" + flushPct + "<br>"
+  let metaText = "Center:" + centeredPct + "  Flush:" + flushPct + "  Rejoin:" + rejoinPct + "<br>"
     + "Trim:" + trimPct + "  Area:" + plan.area + "<br>"
     + "Fuel:" + fuelPct + "  Overlap:" + ovPct + "  Strong:" + stPct;
   meta.innerHTML = metaText;

@@ -44,6 +44,9 @@ const FLUSH_MAX = 1;
 // Always some trim — 0 looks too packed after crop.
 const TRIM_MIN = 0.2;
 const TRIM_MAX = 1;
+// Rejoin strength on the offer; runtime gates when it actually biases seats.
+const REJOIN_MIN = 0.6;
+const REJOIN_MAX = 1;
 // Center×flush: pick one of these×these equal bands, then uniform inside the cell.
 const LAYOUT_BANDS = 3;
 
@@ -156,6 +159,7 @@ Planner.offer = function (tier, wave) {
       open: "any",
       centered: centered,
       flush: flush,
+      rejoin: REJOIN_MIN + Math.random() * (REJOIN_MAX - REJOIN_MIN),
       trim: TRIM_MIN + Math.random() * (TRIM_MAX - TRIM_MIN),
       area: a,
       fuelChance: fuelChance,

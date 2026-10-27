@@ -44,6 +44,12 @@ Plan.copy = function (plan) {
   if (flush !== flush) flush = FLUSH_DEFAULT;
   if (flush < 0) flush = 0;
   if (flush > 1) flush = 1;
+  let rejoin = plan.rejoin;
+  if (rejoin === undefined || rejoin === null || rejoin === "") rejoin = REJOIN_DEFAULT;
+  rejoin = +rejoin;
+  if (rejoin !== rejoin) rejoin = REJOIN_DEFAULT;
+  if (rejoin < 0) rejoin = 0;
+  if (rejoin > 1) rejoin = 1;
   let trim = plan.trim;
   if (trim === undefined || trim === null || trim === "") trim = TRIM_DEFAULT;
   trim = +trim;
@@ -75,6 +81,7 @@ Plan.copy = function (plan) {
     open: openSeat,
     centered: centered,
     flush: flush,
+    rejoin: rejoin,
     trim: trim,
     fuelChance: fuelChance,
     overlap: overlap,

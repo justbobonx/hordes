@@ -15,6 +15,11 @@ const CENTERED_DEFAULT = 0.4;
 const FLUSH_SCORE_MAX = 1.5;
 const FLUSH_DEFAULT = 0.6;
 const TRIM_DEFAULT = 0.45;
+// Missing rejoin stays off so intro/old plans do not pull blobs together.
+const REJOIN_DEFAULT = 0;
+const REJOIN_SCORE_MAX = 1.5;
+// When several blobs exist and this drop is not a forced split, chance to bias seats toward rejoining.
+const REJOIN_CHANCE = 0.8;
 const MIN_BLOB_SIZE = 3;
 // Chance to start a new blob when remaining stamps can finish small ones and still fill a new min blob.
 const NEW_BLOB_CHANCE = 0.5;
@@ -62,6 +67,12 @@ GridBuilder._build = function (plan) {
   if (flush !== flush) flush = FLUSH_DEFAULT;
   if (flush < 0) flush = 0;
   if (flush > 1) flush = 1;
+  let rejoin = plan.rejoin;
+  if (rejoin === undefined || rejoin === null || rejoin === "") rejoin = REJOIN_DEFAULT;
+  rejoin = +rejoin;
+  if (rejoin !== rejoin) rejoin = REJOIN_DEFAULT;
+  if (rejoin < 0) rejoin = 0;
+  if (rejoin > 1) rejoin = 1;
   let trim = plan.trim;
   if (trim === undefined || trim === null || trim === "") trim = 0.2;
   trim = +trim;
@@ -69,7 +80,7 @@ GridBuilder._build = function (plan) {
   if (trim < 0) trim = 0;
   if (trim > 1) trim = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
-    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
+    const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, rejoin, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
     if (!built) continue;
     GridBuilder.paintCities(built.grid, stamps.length);
     GridBuilder.trim(built.grid, built.cover, built.sole, built.own, built.uniqueMin, trim);
@@ -78,7 +89,7 @@ GridBuilder._build = function (plan) {
     built.grid.dress();
     return GridBuilder.cropEmptyRim(built.grid, plan);
   }
-  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
+  const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, rejoin, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
   const grid = built ? built.grid : new Grid(rows, cols);
   if (!built) {
     const kind = stamps[0] || "33";
@@ -105,7 +116,7 @@ GridBuilder._build = function (plan) {
   return GridBuilder.cropEmptyRim(grid, plan);
 };
 
-GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, fuelChance, overlap, stronger) {
+GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, rejoin, fuelChance, overlap, stronger) {
   const grid = new Grid(rows, cols);
   const cover = [];
   const sole = [];
@@ -146,7 +157,7 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, f
     const canNew = left >= deficit + MIN_BLOB_SIZE;
     const wantNew = i > 0 && canNew && GridBuilder.rand() < NEW_BLOB_CHANCE;
     const stampId = nextId;
-    const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, flush, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
+    const placed = GridBuilder.dropStamp(grid, stamps[i], stampId, i === 0, openSeat, wantNew, small, flush, centered, rejoin, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap);
     if (!placed) return null;
     if (placed.fp) { placed.fp.boardId = pieces.length; pieces.push(placed.fp); }
     if (placed.spawned) nextBlob++;
@@ -324,7 +335,7 @@ GridBuilder.commitPiece = function (grid, cells, id, uniqueMinVal, strongN, join
   return { spawned: spawned, soleCells: soleCells };
 };
 
-GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, flush, centered, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap) {
+GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, small, flush, centered, rejoin, cover, sole, blobAt, own, uniqueMin, strongCount, blobSize, nextBlob, stampsOn, overlap) {
   const rows = grid.rows;
   const cols = grid.cols;
   const shape = Grid.STAMP_DEFINITIONS[kind];
@@ -429,18 +440,18 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
       } else if (openSeat === "inner") {
         if (edge) return;
       }
-      legal.push({ cells: cells, hits: [], join: nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
+      legal.push({ cells: cells, hits: [], grazes: [], join: nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
       return;
     }
     if (wantNew) {
       // True split only — no graze onto an existing blob.
       if (grazes.length) return;
-      legal.push({ cells: cells, hits: [], join: nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
+      legal.push({ cells: cells, hits: [], grazes: [], join: nextBlob, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
       return;
     }
     if (join < 0) return;
     if (small && !(blobSize[join] && blobSize[join] < MIN_BLOB_SIZE)) return;
-    legal.push({ cells: cells, hits: hits, join: join, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
+    legal.push({ cells: cells, hits: hits, grazes: grazes, join: join, fr: fresh ? freshR / fresh : 0, fc: fresh ? freshC / fresh : 0, row: row, col: col, need: need });
   }
 
   function flushOf(seat) {
@@ -523,6 +534,98 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     for (let ci = 0; ci < colAnchors.length; ci++) consider(rowAnchors[ri], colAnchors[ci]);
   }
   if (!legal.length) return null;
+
+  // Count live blobs; rejoin only rolls when several already exist and this drop is not a split.
+  let blobCount = 0;
+  for (let b = 0; b < blobSize.length; b++) {
+    if (blobSize[b]) blobCount++;
+  }
+  let rejoinAmt = 0;
+  if (!first && !wantNew && blobCount >= 2 && rejoin > 0 && GridBuilder.rand() < REJOIN_CHANCE) {
+    rejoinAmt = rejoin;
+  }
+
+  // Per-blob and board-wide mass centers, only when rejoin will bias this pick.
+  const blobSumR = [];
+  const blobSumC = [];
+  const blobCellN = [];
+  let massR = midR;
+  let massC = midC;
+  if (rejoinAmt > 0) {
+    let massSumR = 0;
+    let massSumC = 0;
+    let massN = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const b = blobAt[r][c];
+        if (b < 0) continue;
+        if (!blobCellN[b]) {
+          blobSumR[b] = 0;
+          blobSumC[b] = 0;
+          blobCellN[b] = 0;
+        }
+        blobSumR[b] += r;
+        blobSumC[b] += c;
+        blobCellN[b]++;
+        massSumR += r;
+        massSumC += c;
+        massN++;
+      }
+    }
+    if (massN) {
+      massR = massSumR / massN;
+      massC = massSumC / massN;
+    }
+  }
+
+  function rejoinOf(seat) {
+    const grazes = seat.grazes || [];
+    // Bridge: footprint that touches several blobs scores higher.
+    let bridge = 0;
+    if (grazes.length >= 2) {
+      bridge = (grazes.length - 1) / Math.max(1, blobCount - 1);
+      if (bridge > 1) bridge = 1;
+    }
+    // Gap shrink: bridging closes the gap; otherwise reward sitting closer to another blob than the join blob's center is.
+    let gapShrink = 0;
+    if (grazes.length >= 2) {
+      gapShrink = 1;
+    } else if (grazes.length === 1) {
+      const joinBlob = grazes[0];
+      let bestD = Infinity;
+      let bestB = -1;
+      for (let b = 0; b < blobCellN.length; b++) {
+        if (!blobCellN[b] || b === joinBlob) continue;
+        const br = blobSumR[b] / blobCellN[b];
+        const bc = blobSumC[b] / blobCellN[b];
+        const dr = seat.fr - br;
+        const dc = seat.fc - bc;
+        const d = Math.sqrt(dr * dr + dc * dc);
+        if (d < bestD) {
+          bestD = d;
+          bestB = b;
+        }
+      }
+      if (bestB >= 0 && blobCellN[joinBlob]) {
+        const jr = blobSumR[joinBlob] / blobCellN[joinBlob];
+        const jc = blobSumC[joinBlob] / blobCellN[joinBlob];
+        const br = blobSumR[bestB] / blobCellN[bestB];
+        const bc = blobSumC[bestB] / blobCellN[bestB];
+        const sepDr = jr - br;
+        const sepDc = jc - bc;
+        const sep = Math.sqrt(sepDr * sepDr + sepDc * sepDc);
+        if (sep > 0) {
+          gapShrink = 1 - bestD / sep;
+          if (gapShrink < 0) gapShrink = 0;
+          if (gapShrink > 1) gapShrink = 1;
+        }
+      }
+    }
+    // Mass: pull toward the mass-weighted center of every filled blob cell.
+    const massAffinity = near(seat.fr, seat.fc, massR, massC);
+    return (bridge + gapShrink + massAffinity) / 3;
+  }
+
   let total = 0;
   for (let i = 0; i < legal.length; i++) {
     const seat = legal[i];
@@ -534,8 +637,11 @@ GridBuilder.dropStamp = function (grid, kind, id, first, openSeat, wantNew, smal
     const flushScore = flushOf(seat);
     // Stretch flush preference so a flush seat can outweigh a neutral spot.
     const stretchedFlush = flushScore * FLUSH_SCORE_MAX;
+    const rejoinScore = rejoinAmt > 0 ? rejoinOf(seat) : 0;
+    // Same mix shape as flush: strength scales how much the rejoin score reshapes the seat.
+    const stretchedRejoin = rejoinScore * REJOIN_SCORE_MAX;
     const noise = 0.6 + GridBuilder.rand() * 0.4;
-    seat.weight = centerTerm * ((1 - flush) + flush * stretchedFlush) * noise;
+    seat.weight = centerTerm * ((1 - flush) + flush * stretchedFlush) * ((1 - rejoinAmt) + rejoinAmt * stretchedRejoin) * noise;
     if (seat.weight < 0.05) seat.weight = 0.05;
     total += seat.weight;
   }
