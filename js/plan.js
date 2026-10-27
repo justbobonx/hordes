@@ -44,12 +44,12 @@ Plan.copy = function (plan) {
   if (flush !== flush) flush = FLUSH_DEFAULT;
   if (flush < 0) flush = 0;
   if (flush > 1) flush = 1;
-  let thin = plan.thin;
-  if (thin === undefined || thin === null || thin === "") thin = THIN_DEFAULT;
-  thin = +thin;
-  if (thin !== thin) thin = THIN_DEFAULT;
-  if (thin < 0) thin = 0;
-  if (thin > 1) thin = 1;
+  let trim = plan.trim;
+  if (trim === undefined || trim === null || trim === "") trim = TRIM_DEFAULT;
+  trim = +trim;
+  if (trim !== trim) trim = TRIM_DEFAULT;
+  if (trim < 0) trim = 0;
+  if (trim > 1) trim = 1;
   let area = plan.area;
   if (area != null) area = area | 0;
   let fuelChance = plan.fuelChance;
@@ -75,7 +75,7 @@ Plan.copy = function (plan) {
     open: openSeat,
     centered: centered,
     flush: flush,
-    thin: thin,
+    trim: trim,
     fuelChance: fuelChance,
     overlap: overlap,
     stronger: stronger,

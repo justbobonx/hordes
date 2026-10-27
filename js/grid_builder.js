@@ -1,6 +1,6 @@
 /** Drop stamps, then dress grass with towns. The blob stays red. */
 
-const THIN_CELL_WEIGHTS = {
+const TRIM_CELL_WEIGHTS = {
   0: 0,
   1: 0.1,
   2: 1.5,
@@ -14,7 +14,7 @@ const CENTERED_SCORE_MAX = 1.5;
 const CENTERED_DEFAULT = 0.4;
 const FLUSH_SCORE_MAX = 1.5;
 const FLUSH_DEFAULT = 0.6;
-const THIN_DEFAULT = 0.45;
+const TRIM_DEFAULT = 0.45;
 const MIN_BLOB_SIZE = 3;
 const CROP_PAD = 3;
 
@@ -57,17 +57,17 @@ GridBuilder._build = function (plan) {
   if (flush !== flush) flush = FLUSH_DEFAULT;
   if (flush < 0) flush = 0;
   if (flush > 1) flush = 1;
-  let thin = plan.thin;
-  if (thin === undefined || thin === null || thin === "") thin = 0.2;
-  thin = +thin;
-  if (thin !== thin) thin = THIN_DEFAULT;
-  if (thin < 0) thin = 0;
-  if (thin > 1) thin = 1;
+  let trim = plan.trim;
+  if (trim === undefined || trim === null || trim === "") trim = 0.2;
+  trim = +trim;
+  if (trim !== trim) trim = TRIM_DEFAULT;
+  if (trim < 0) trim = 0;
+  if (trim > 1) trim = 1;
   for (let attempt = 0; attempt < 36; attempt++) {
     const built = GridBuilder.dropAll(rows, cols, stamps, openSeat, flush, centered, plan.fuelChance || 0, plan.overlap || 0, plan.stronger || 0);
     if (!built) continue;
     GridBuilder.paintCities(built.grid, stamps.length);
-    GridBuilder.thin(built.grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
+    GridBuilder.trim(built.grid, built.cover, built.sole, built.own, built.uniqueMin, trim);
     GridBuilder.promote(built.grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
     built.grid.pieces = built.pieces || [];
     built.grid.dress();
@@ -91,7 +91,7 @@ GridBuilder._build = function (plan) {
     }
   } else {
     GridBuilder.paintCities(grid, stamps.length);
-    GridBuilder.thin(grid, built.cover, built.sole, built.own, built.uniqueMin, thin);
+    GridBuilder.trim(grid, built.cover, built.sole, built.own, built.uniqueMin, trim);
     GridBuilder.promote(grid, built.cover, built.stampsOn, built.strongCount, plan.stronger || 0);
     grid.pieces = built.pieces || [];
   }
@@ -171,8 +171,8 @@ GridBuilder.dropAll = function (rows, cols, stamps, openSeat, flush, centered, f
   return { grid: grid, blobAt: blobAt, pieces: pieces, cover: cover, sole: sole, own: own, uniqueMin: uniqueMin, strongCount: strongCount, stampsOn: stampsOn };
 };
 
-GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
-  if (!thin || thin <= 0 || !cover || !sole || !own || !uniqueMin) return;
+GridBuilder.trim = function (grid, cover, sole, own, uniqueMin, trim) {
+  if (!trim || trim <= 0 || !cover || !sole || !own || !uniqueMin) return;
   const rows = grid.rows;
   const cols = grid.cols;
   const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -198,7 +198,7 @@ GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
       else if (cover[r][c] === 1 && remaining[sole[r][c]] > 0) initial++;
     }
   }
-  const target = Math.round(initial * thin * 0.9);
+  const target = Math.round(initial * trim * 0.9);
   if (target < 1) return;
   for (let removed = 0; removed < target; removed++) {
     const eligible = [];
@@ -212,7 +212,7 @@ GridBuilder.thin = function (grid, cover, sole, own, uniqueMin, thin) {
         if (cover[r][c] >= 2) allowed = true;
         else if (cover[r][c] === 1 && remaining[sole[r][c]] > 0) allowed = true;
         if (!allowed) continue;
-        const w = THIN_CELL_WEIGHTS[g];
+        const w = TRIM_CELL_WEIGHTS[g];
         if (w <= 0) continue;
         eligible.push({ r: r, c: c, w: w });
         total += w;

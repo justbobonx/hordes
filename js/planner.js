@@ -36,14 +36,22 @@ const AREA_MULT_MAX = 2.5;
 // Portrait aspect rows/cols; 1 is square, top end is the tallest boards.
 const ASPECT_MIN = 1;
 const ASPECT_MAX = 1.5;
+// Offer layout rolls (inclusive-ish via Math.random * span).
+const CENTERED_MIN = 0;
+const CENTERED_MAX = 1;
+const FLUSH_MIN = 0;
+const FLUSH_MAX = 1;
+// Always some trim — 0 looks too packed after crop.
+const TRIM_MIN = 0.2;
+const TRIM_MAX = 1;
 
 Planner.INTRO = {
-  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", thin: 0 },
-  2: { cols: 6, rows: 7, stamps: ["33"], open: "edge", thin: 0 },
-  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner", centered: 0, flush:0, thin: 0 },
-  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", centered: 0.5, flush:0, thin: 0 },
-  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", centered: 0.5, flush:0.5, thin: 0 },
-  6: { cols: 9, rows: 10, stamps: ["45", "51", "24"], open: "inner", centered: 0.3, flush:0.7, thin: .5 },
+  1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", trim: 0 },
+  2: { cols: 6, rows: 7, stamps: ["33"], open: "edge", trim: 0 },
+  3: { cols: 7, rows: 7, stamps: ["33", "33"], open: "inner", centered: 0, flush:0, trim: 0 },
+  4: { cols: 7, rows: 8, stamps: ["33", "35"], open: "clipped", centered: 0.5, flush:0, trim: 0 },
+  5: { cols: 9, rows: 10, stamps: ["33", "35", "42"], open: "inner", centered: 0.5, flush:0.5, trim: 0 },
+  6: { cols: 9, rows: 10, stamps: ["45", "51", "24"], open: "inner", centered: 0.3, flush:0.7, trim: .5 },
 };
 
 Planner.intro = function (step) {
@@ -111,8 +119,8 @@ Planner.offer = function (tier, wave) {
   const mult = AREA_MULT_MIN + Math.random() * (AREA_MULT_MAX - AREA_MULT_MIN);
   let area = cells * mult;
   const a = Math.round(mult * 10);
-  const minC = maxW + 2;
-  const minR = maxH + 2;
+  const minC = maxW;
+  const minR = maxH;
   if (area < minC * minR) area = minC * minR;
   const aspect = ASPECT_MIN + Math.random() * (ASPECT_MAX - ASPECT_MIN);
   let cols = Math.round(Math.sqrt(area / aspect));
@@ -139,9 +147,9 @@ Planner.offer = function (tier, wave) {
       cols: cols,
       stamps: stamps,
       open: "any",
-      centered: Math.random(),
-      flush: Math.random(),
-      thin: Math.random(),
+      centered: CENTERED_MIN + Math.random() * (CENTERED_MAX - CENTERED_MIN),
+      flush: FLUSH_MIN + Math.random() * (FLUSH_MAX - FLUSH_MIN),
+      trim: TRIM_MIN + Math.random() * (TRIM_MAX - TRIM_MIN),
       area: a,
       fuelChance: fuelChance,
       overlap: overlap,
