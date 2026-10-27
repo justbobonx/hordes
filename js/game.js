@@ -32,26 +32,6 @@ const CHARGE_MIN_HOURS = 1;
 // Endless score: 100 at one mission day, 0 at 24 + 96 hours.
 const SCORE_ZERO_HOURS = 120;
 
-// Status toast over the board (seconds / layout / colors matching status-* CSS).
-const TOAST_FADE_IN = 0.15;
-const TOAST_HOLD = 1.8;
-const TOAST_FADE_OUT = 0.3;
-const TOAST_Y_FRAC = 0.35;
-// Font scales with board width, then shrinks to fit the longest line.
-const TOAST_FONT_FRAC = 0.14;
-const TOAST_FONT_MIN = 28;
-const TOAST_FONT_MAX = 96;
-const TOAST_WIDTH_FRAC = 0.95;
-const TOAST_OUTLINE_DIV = 16;
-const TOAST_OUTLINE_MIN = 1;
-const TOAST_GAP_DIV = 8;
-const TOAST_OUTLINE_ALPHA = 0.2;
-const TOAST_COLOR_BLUE = "#8eb0f0";
-const TOAST_COLOR_GREEN = "#a8e0a0";
-const TOAST_COLOR_RED = "#f09090";
-const TOAST_COLOR_GOLD = "#f0e6a8";
-const TOAST_COLOR_ORANGE = "#e07a2f";
-
 function Game() {
   this.ui = new Ui();
   this.chrome = new PlayChrome();
@@ -109,9 +89,6 @@ function Game() {
   this.isTutorial = false;
   // Level board effects only, in board canvas pixels.
   this.particles = new Particles();
-  // Canvas status toast over the board; not part of the bottom bar.
-  this.toast = null;
-  this.toastKey = "";
 }
 
 Game.prototype.boot = function () {
@@ -205,7 +182,7 @@ Game.prototype.bind = function () {
     const t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
     if (self.mode !== "level") return;
-    self.togglePlanDebug();
+    self.ui.togglePlanDebug(self.planDebugText());
   });
   canvas.addEventListener("pointerdown", function (e) {
     self.onDown(e);
@@ -275,7 +252,7 @@ Game.prototype.returnToStart = function () {
   this.clearHold();
   this.preview = null;
   this.particles.clear();
-  this.clearToast();
+  this.ui.clearToast();
   this.grid = null;
   this.plan = null;
   this.ended = null;
@@ -530,7 +507,7 @@ Game.prototype.onPlan = function (card) {
 
 Game.prototype.beginWave = function (plan) {
   this.abortActions();
-  this.clearToast();
+  this.ui.clearToast();
   this.setMode("level");
   this.ui.hidePlan();
   this.ui.hideStory();
@@ -1213,8 +1190,8 @@ Game.prototype.updateHud = function () {
     tally: tally,
     tallyColor: tallyColor,
   });
-  if (this.mode === "level") this.syncToast(status);
-  else this.clearToast();
+  if (this.mode === "level") this.ui.syncToast(status);
+  else this.ui.clearToast();
 };
 
 Game.prototype.statusView = function () {
@@ -1279,94 +1256,15 @@ Game.prototype.statusView = function () {
   };
 };
 
-Game.prototype.toastColor = function (cls) {
-  if (cls === "status-green") return TOAST_COLOR_GREEN;
-  if (cls === "status-red") return TOAST_COLOR_RED;
-  if (cls === "status-blue") return TOAST_COLOR_BLUE;
-  return TOAST_COLOR_BLUE;
-};
-
-// Show or refresh the canvas toast when status text/color/stickiness changes.
-Game.prototype.syncToast = function (status) {
-  const text = status && status.text ? status.text : "";
-  const color = text ? this.toastColor(status.cls) : "";
-  const lineColors = status && status.lineColors ? status.lineColors : null;
-  const sticky = !!(status && status.sticky);
-  const key = text ? text + "\0" + color + "\0" + (lineColors ? lineColors.join(",") : "") + "\0" + (sticky ? "1" : "0") : "";
-  if (!text) {
-    this.toastKey = "";
-    this.dismissToast();
-    return;
-  }
-  // Sticky plan-debug toast stays until I is pressed again (end-level sticky still wins).
-  const cur = this.toast;
-  if (cur && cur.debug && !cur.done && cur.phase !== "out" && !sticky) return;
-  // Same status already presented: do not restart a finished timed toast.
-  if (key === this.toastKey) return;
-  this.toastKey = key;
-  this.toast = {
-    text: text,
-    color: color,
-    lineColors: lineColors,
-    sticky: sticky,
-    phase: "in",
-    t: 0,
-    alpha: 0,
-    outFrom: 1,
-    done: false,
-  };
-};
-
 // Debug: plan config line (formerly on the wave label), as a sticky toast (toggled by I).
 Game.prototype.planDebugText = function () {
   const p = this.plan;
   if (!p) return "";
   const pct = function (v) { return Math.round((+v || 0) * 100); };
   const pad = function (n) { return (n < 10 ? "0" : "") + n; };
-  return "(C:" + pad(pct(p.centered)) + ",F:" + pad(pct(p.flush)) + ",R:" + pad(pct(p.rejoin)) + ", T:" + pad(pct(p.trim)) +
+  return "(C:" + pad(pct(p.centered)) + ",F:" + pad(pct(p.flush)) + ",R:" + pad(pct(p.rejoin)) + ",T:" + pad(pct(p.trim)) +
     ",A:" + p.area + "  F:" + pct(p.fuelChance) +
     ",O:" + pad(pct(p.overlap)) + ",S:" + pad(pct(p.stronger)) + ")";
-};
-
-Game.prototype.showPlanDebug = function () {
-  const text = this.planDebugText();
-  if (!text) return;
-  // Clear key so the next status sync re-presents the real status after this.
-  this.toastKey = "";
-  this.toast = {
-    text: text, color: TOAST_COLOR_BLUE, sticky: true, debug: true,
-    phase: "in", t: 0, alpha: 0, outFrom: 1, done: false,
-  };
-};
-
-// I key: toggle the sticky plan-debug toast.
-Game.prototype.togglePlanDebug = function () {
-  const cur = this.toast;
-  if (cur && cur.debug && !cur.done && cur.phase !== "out") {
-    this.toastKey = "";
-    this.dismissToast();
-    return;
-  }
-  this.showPlanDebug();
-};
-
-Game.prototype.dismissToast = function () {
-  const cur = this.toast;
-  if (!cur || cur.done) {
-    this.toast = null;
-    return;
-  }
-  if (cur.phase === "out") return;
-  cur.sticky = false;
-  cur.phase = "out";
-  cur.t = 0;
-  cur.outFrom = cur.alpha > 0 ? cur.alpha : 1;
-};
-
-// Drop toast immediately (no fade); use when leaving the level board.
-Game.prototype.clearToast = function () {
-  this.toast = null;
-  this.toastKey = "";
 };
 
 Game.prototype.pauseClock = function () {
@@ -1437,7 +1335,7 @@ Game.prototype.setMode = function (mode) {
   const isMap = mode === "map";
   const isLevel = mode === "level";
   // Sticky end-of-level toast must not freeze across overmap / next level.
-  if (wasLevel && !isLevel) this.clearToast();
+  if (wasLevel && !isLevel) this.ui.clearToast();
   if (board) board.classList.toggle("inactive", !isLevel);
   if (map) map.classList.toggle("active", isMap);
   if (mapTop) mapTop.hidden = !isMap;
@@ -1568,7 +1466,7 @@ Game.prototype.onLevelExit = function (reason) {
   this.grid = null;
   this.ended = null;
   this.plan = null;
-  this.clearToast();
+  this.ui.clearToast();
   this.setMode("map");
 };
 
@@ -1611,9 +1509,4 @@ Game.prototype.updateMapHud = function () {
     elStatus.textContent = status;
   }
 };
-
-
-
-
-
 

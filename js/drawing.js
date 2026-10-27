@@ -120,86 +120,8 @@ Game.prototype.draw = function (dt) {
   }
   this.particles.step(dt);
   this.particles.draw(ctx);
-  this.stepToast(dt);
-  this.drawToast(ctx);
-};
-
-Game.prototype.stepToast = function (dt) {
-  const toast = this.toast;
-  if (!toast || toast.done) return;
-  toast.t += dt;
-  if (toast.phase === "in") {
-    toast.alpha = Math.min(1, toast.t / TOAST_FADE_IN);
-    if (toast.t >= TOAST_FADE_IN) {
-      toast.phase = "hold";
-      toast.t = 0;
-      toast.alpha = 1;
-    }
-  } else if (toast.phase === "hold") {
-    toast.alpha = 1;
-    if (!toast.sticky && toast.t >= TOAST_HOLD) {
-      toast.phase = "out";
-      toast.t = 0;
-      toast.outFrom = 1;
-    }
-  } else if (toast.phase === "out") {
-    const from = toast.outFrom != null ? toast.outFrom : 1;
-    toast.alpha = Math.max(0, from * (1 - toast.t / TOAST_FADE_OUT));
-    if (toast.t >= TOAST_FADE_OUT) {
-      toast.done = true;
-      toast.alpha = 0;
-      this.toast = null;
-    }
-  }
-};
-
-Game.prototype.drawToast = function (ctx) {
-  const toast = this.toast;
-  if (!toast || toast.done || toast.alpha <= 0) return;
-  const o = this.origin;
-  if (!o) return;
-  const lines = toast.text.split("\n");
-  const boardW = o.cols * o.cell;
-  const boardH = o.rows * o.cell;
-  let fontPx = Math.max(TOAST_FONT_MIN, Math.min(TOAST_FONT_MAX, boardW * TOAST_FONT_FRAC));
-  ctx.save();
-  ctx.font = fontPx + "px m5x7, monospace";
-  let longest = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const w = ctx.measureText(lines[i]).width;
-    if (w > longest) longest = w;
-  }
-  const maxW = boardW * TOAST_WIDTH_FRAC;
-  if (longest > maxW && longest > 0) {
-    fontPx = Math.max(TOAST_FONT_MIN, fontPx * (maxW / longest));
-  }
-  const gap = fontPx / TOAST_GAP_DIV;
-  const outline = Math.max(TOAST_OUTLINE_MIN, Math.round(fontPx / TOAST_OUTLINE_DIV));
-  const lineH = fontPx;
-  const totalH = lines.length * lineH + Math.max(0, lines.length - 1) * gap;
-  const cx = o.x + boardW / 2;
-  const cy = o.y + boardH * TOAST_Y_FRAC;
-  const y0 = cy - totalH / 2 + lineH / 2;
-  ctx.globalAlpha = toast.alpha;
-  ctx.font = fontPx + "px m5x7, monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  for (let i = 0; i < lines.length; i++) {
-    const x = cx;
-    const y = y0 + i * (lineH + gap);
-    ctx.fillStyle = "#000000";
-    ctx.globalAlpha = toast.alpha * TOAST_OUTLINE_ALPHA;
-    for (let dy = -outline; dy <= outline; dy++) {
-      for (let dx = -outline; dx <= outline; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        ctx.fillText(lines[i], x + dx, y + dy);
-      }
-    }
-    ctx.globalAlpha = toast.alpha;
-    ctx.fillStyle = (toast.lineColors && toast.lineColors[i]) || toast.color;
-    ctx.fillText(lines[i], x, y);
-  }
-  ctx.restore();
+  this.ui.stepToast(dt);
+  this.ui.drawToast(ctx, this.origin);
 };
 
 Game.prototype.drawTray = function (ctx) {

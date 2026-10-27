@@ -1,5 +1,25 @@
 /** HUD, overlays, and DOM wiring. Game keeps board state. */
 
+// Canvas status toast over the board (seconds / layout / colors matching status-* CSS).
+const TOAST_FADE_IN = 0.15;
+const TOAST_HOLD = 1.8;
+const TOAST_FADE_OUT = 0.3;
+const TOAST_Y_FRAC = 0.35;
+// Font scales with board width, then shrinks to fit the longest line.
+const TOAST_FONT_FRAC = 0.14;
+const TOAST_FONT_MIN = 28;
+const TOAST_FONT_MAX = 96;
+const TOAST_WIDTH_FRAC = 0.95;
+const TOAST_OUTLINE_DIV = 16;
+const TOAST_OUTLINE_MIN = 1;
+const TOAST_GAP_DIV = 8;
+const TOAST_OUTLINE_ALPHA = 0.2;
+const TOAST_COLOR_BLUE = "#8eb0f0";
+const TOAST_COLOR_GREEN = "#a8e0a0";
+const TOAST_COLOR_RED = "#f09090";
+const TOAST_COLOR_GOLD = "#f0e6a8";
+const TOAST_COLOR_ORANGE = "#e07a2f";
+
 // Fallback only when the bar is missing or display:none (height 0).
 // Mobile bar height is auto; desktop stays ~72. Live layout reads the real height.
 const HUD_BOT_MIN = 56;
@@ -46,6 +66,9 @@ function Ui() {
   this.onPlanBack = null;
   this.onStoryContinue = null;
   this.expandedMode = null;
+  // Canvas status toast over the board; not part of the bottom bar.
+  this.toast = null;
+  this.toastKey = "";
 }
 
 Ui.prototype.planOpen = function () {
@@ -412,4 +435,161 @@ Ui.prototype.renderModeRows = function () {
   if (this.modeRowEndless) this.modeRowEndless.hidden = false;
   fillRow(this.modeRowCampaign, "campaign", handlers.hasCampaignSave, handlers.campaignInfo);
   fillRow(this.modeRowEndless, "endless", handlers.hasEndlessSave, handlers.endlessInfo);
+};
+
+Ui.prototype.toastColor = function (cls) {
+  if (cls === "status-green") return TOAST_COLOR_GREEN;
+  if (cls === "status-red") return TOAST_COLOR_RED;
+  if (cls === "status-blue") return TOAST_COLOR_BLUE;
+  return TOAST_COLOR_BLUE;
+};
+
+// Show or refresh the canvas toast when status text/color/stickiness changes.
+Ui.prototype.syncToast = function (status) {
+  const text = status && status.text ? status.text : "";
+  const color = text ? this.toastColor(status.cls) : "";
+  const lineColors = status && status.lineColors ? status.lineColors : null;
+  const sticky = !!(status && status.sticky);
+  const key = text ? text + "\0" + color + "\0" + (lineColors ? lineColors.join(",") : "") + "\0" + (sticky ? "1" : "0") : "";
+  if (!text) {
+    this.toastKey = "";
+    this.dismissToast();
+    return;
+  }
+  // Sticky plan-debug toast stays until I is pressed again (end-level sticky still wins).
+  const cur = this.toast;
+  if (cur && cur.debug && !cur.done && cur.phase !== "out" && !sticky) return;
+  // Same status already presented: do not restart a finished timed toast.
+  if (key === this.toastKey) return;
+  this.toastKey = key;
+  this.toast = {
+    text: text,
+    color: color,
+    lineColors: lineColors,
+    sticky: sticky,
+    phase: "in",
+    t: 0,
+    alpha: 0,
+    outFrom: 1,
+    done: false,
+  };
+};
+
+// Sticky plan-config toast (toggled by I); text comes from the game.
+Ui.prototype.showPlanDebug = function (text) {
+  if (!text) return;
+  // Clear key so the next status sync re-presents the real status after this.
+  this.toastKey = "";
+  this.toast = {
+    text: text, color: TOAST_COLOR_BLUE, sticky: true, debug: true,
+    phase: "in", t: 0, alpha: 0, outFrom: 1, done: false,
+  };
+};
+
+// I key: toggle the sticky plan-debug toast.
+Ui.prototype.togglePlanDebug = function (text) {
+  const cur = this.toast;
+  if (cur && cur.debug && !cur.done && cur.phase !== "out") {
+    this.toastKey = "";
+    this.dismissToast();
+    return;
+  }
+  this.showPlanDebug(text);
+};
+
+Ui.prototype.dismissToast = function () {
+  const cur = this.toast;
+  if (!cur || cur.done) {
+    this.toast = null;
+    return;
+  }
+  if (cur.phase === "out") return;
+  cur.sticky = false;
+  cur.phase = "out";
+  cur.t = 0;
+  cur.outFrom = cur.alpha > 0 ? cur.alpha : 1;
+};
+
+// Drop toast immediately (no fade); use when leaving the level board.
+Ui.prototype.clearToast = function () {
+  this.toast = null;
+  this.toastKey = "";
+};
+
+Ui.prototype.stepToast = function (dt) {
+  const toast = this.toast;
+  if (!toast || toast.done) return;
+  toast.t += dt;
+  if (toast.phase === "in") {
+    toast.alpha = Math.min(1, toast.t / TOAST_FADE_IN);
+    if (toast.t >= TOAST_FADE_IN) {
+      toast.phase = "hold";
+      toast.t = 0;
+      toast.alpha = 1;
+    }
+  } else if (toast.phase === "hold") {
+    toast.alpha = 1;
+    if (!toast.sticky && toast.t >= TOAST_HOLD) {
+      toast.phase = "out";
+      toast.t = 0;
+      toast.outFrom = 1;
+    }
+  } else if (toast.phase === "out") {
+    const from = toast.outFrom != null ? toast.outFrom : 1;
+    toast.alpha = Math.max(0, from * (1 - toast.t / TOAST_FADE_OUT));
+    if (toast.t >= TOAST_FADE_OUT) {
+      toast.done = true;
+      toast.alpha = 0;
+      this.toast = null;
+    }
+  }
+};
+
+Ui.prototype.drawToast = function (ctx, origin) {
+  const toast = this.toast;
+  if (!toast || toast.done || toast.alpha <= 0) return;
+  const o = origin;
+  if (!o) return;
+  const lines = toast.text.split("\n");
+  const boardW = o.cols * o.cell;
+  const boardH = o.rows * o.cell;
+  let fontPx = Math.max(TOAST_FONT_MIN, Math.min(TOAST_FONT_MAX, boardW * TOAST_FONT_FRAC));
+  ctx.save();
+  ctx.font = fontPx + "px m5x7, monospace";
+  let longest = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const w = ctx.measureText(lines[i]).width;
+    if (w > longest) longest = w;
+  }
+  const maxW = boardW * TOAST_WIDTH_FRAC;
+  if (longest > maxW && longest > 0) {
+    fontPx = Math.max(TOAST_FONT_MIN, fontPx * (maxW / longest));
+  }
+  const gap = fontPx / TOAST_GAP_DIV;
+  const outline = Math.max(TOAST_OUTLINE_MIN, Math.round(fontPx / TOAST_OUTLINE_DIV));
+  const lineH = fontPx;
+  const totalH = lines.length * lineH + Math.max(0, lines.length - 1) * gap;
+  const cx = o.x + boardW / 2;
+  const cy = o.y + boardH * TOAST_Y_FRAC;
+  const y0 = cy - totalH / 2 + lineH / 2;
+  ctx.globalAlpha = toast.alpha;
+  ctx.font = fontPx + "px m5x7, monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i < lines.length; i++) {
+    const x = cx;
+    const y = y0 + i * (lineH + gap);
+    ctx.fillStyle = "#000000";
+    ctx.globalAlpha = toast.alpha * TOAST_OUTLINE_ALPHA;
+    for (let dy = -outline; dy <= outline; dy++) {
+      for (let dx = -outline; dx <= outline; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        ctx.fillText(lines[i], x + dx, y + dy);
+      }
+    }
+    ctx.globalAlpha = toast.alpha;
+    ctx.fillStyle = (toast.lineColors && toast.lineColors[i]) || toast.color;
+    ctx.fillText(lines[i], x, y);
+  }
+  ctx.restore();
 };
