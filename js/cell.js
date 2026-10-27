@@ -10,17 +10,20 @@ const STRENGTH_INSET_STEP = 0.1;
 const STRENGTH_INSET_FIRST = 0.8;
 const STRENGTH_INSET_NEXT = 0.2;
 
+// Default seconds for one pulse-vary cycle; cell type may set vspeed to override.
+const PULSE_PERIOD_SEC = 4.0;
+
 const CELL_TYPES = {
   grass: { fill: "#3b7540", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.07 },
   scorched: { fill: "#365139", mark: null, group: false, round: 0.5, vary: "cell", varyAmount: 0.05 },
   city: { fill: "#1665d3", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#92adc3" },
   //city: { fill: "#677592", mark: null, group: true, round: 1, vary: "group", varyAmount: 0.09, outline: "#41b441" },
-  horde: { fill: "#c4392f", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.15 },
+  horde: { fill: "#ab3229", mark: null, group: false, round: 1, vary: "pulse", varyAmount: 0.18 },
   cleared: { fill: "#3f6242", mark: "#b8352c", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   cleared_hint: { fill: "#3f6242", mark: "#e07a2f", group: false, round: 1, vary: "cell", varyAmount: 0.05 },
   ruined: { fill: "#3c4d72", mark: "#6e88ba", group: true, round: 1, vary: "group", varyAmount: 0.05 },
   barrier: { fill: "#664719", mark: null, group: false, round: 0.2, vary: "cell", varyAmount: 0.06 },
-  fuel: { fill: "#d6bf48", mark: null, group: false, round: 2, vary: "pulse", varyAmount: 0.08, outline: "#de8830" },
+  fuel: { fill: "#d6bf48", mark: null, group: false, round: 2, vary: "pulse", varyAmount: 0.08, vspeed:1.0, outline: "#de8830" },
 };
 
 function hexToRgb(hex) {
@@ -162,7 +165,8 @@ Cell.prototype.draw = function (ctx, sprites, x, y, size) {
   let fill = this.fill;
   if (look.vary === "pulse") {
     const t = Date.now() / 1000;
-    const s = Math.sin(t * (Math.PI * 2 / 3.2) + this.phase);
+    const period = look.vspeed != null ? look.vspeed : PULSE_PERIOD_SEC;
+    const s = Math.sin(t * (Math.PI * 2 / period) + this.phase);
     const baseAmt = look.varyAmount != null ? look.varyAmount : 0.12;
     const amount = s >= 0 ? s * baseAmt * 0.6 : s * baseAmt * 1.3;
     fill = varyColor(look.fill, 0, amount);
