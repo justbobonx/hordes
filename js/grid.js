@@ -12,18 +12,20 @@ function Grid(rows, cols) {
   }
 }
 
-Grid.STAMP_DEFINITIONS = {
-  "33": { w: 3, h: 3, p: 2, trayColor:"#e5550b" },
-  "35": { w: 3, h: 5, p: 3, trayColor:"#d6613d" },
-  "53": { w: 5, h: 3, p: 3, trayColor:"#cb5b39" },
-  "24": { w: 2, h: 4, p: 3, trayColor:"#a98636" },
-  "42": { w: 4, h: 2, p: 3, trayColor:"#d09e2f" },
-  "45": { w: 4, h: 5, p: 2, trayColor:"#f49838" },
-  "54": { w: 5, h: 4, p: 2, trayColor:"#f2a049" },
-  "15": { w: 1, h: 5, p: 1, trayColor:"#cf506b" },
-  "51": { w: 5, h: 1, p: 1, trayColor:"#b8484f" },
-  "22": { w: 2, h: 2, p: 1, trayColor:"#c4450c" }
+Grid.STAMP_DEFINITIONS = {                          //area  ave wh
+  "22": { w: 2, h: 2, p: 1, trayColor:"#c4450c" },  //  4    2
+  "33": { w: 3, h: 3, p: 2, trayColor:"#e5550b" },  //  9    3
+  "24": { w: 2, h: 4, p: 3, trayColor:"#a98636" },  //  8    3
+  "42": { w: 4, h: 2, p: 3, trayColor:"#d09e2f" },  //  8    3
+  "35": { w: 3, h: 5, p: 3, trayColor:"#d6613d" },  // 15    4
+  "53": { w: 5, h: 3, p: 3, trayColor:"#cb5b39" },  // 15    4
+  "45": { w: 4, h: 5, p: 2, trayColor:"#f49838" },  // 20    4.5
+  "54": { w: 5, h: 4, p: 2, trayColor:"#f2a049" },  // 20    4.5
+  "15": { w: 1, h: 5, p: 1, trayColor:"#cf506b" },  //  5    3
+  "51": { w: 5, h: 1, p: 1, trayColor:"#b8484f" },  //  5    3
 };
+// 3352445152
+// 1223344555
 
 Grid.prototype.at = function (r, c) {
   if (r < 0 || c < 0 || r >= this.rows || c >= this.cols) return null;
