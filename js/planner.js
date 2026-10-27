@@ -36,7 +36,7 @@ const AREA_MULT_MAX = 2.5;
 // Portrait aspect rows/cols; 1 is square, top end is the tallest boards.
 const ASPECT_MIN = 1;
 const ASPECT_MAX = 1.5;
-// Offer layout rolls (inclusive-ish via Math.random * span).
+// Offer layout rolls.
 const CENTERED_MIN = 0;
 const CENTERED_MAX = 1;
 const FLUSH_MIN = 0;
@@ -44,6 +44,8 @@ const FLUSH_MAX = 1;
 // Always some trim — 0 looks too packed after crop.
 const TRIM_MIN = 0.2;
 const TRIM_MAX = 1;
+// Center×flush: pick one of these×these equal bands, then uniform inside the cell.
+const LAYOUT_BANDS = 3;
 
 Planner.INTRO = {
   1: { cols: 6, rows: 6, stamps: ["33"], open: "inner", trim: 0 },
@@ -139,7 +141,12 @@ Planner.offer = function (tier, wave) {
   if (Math.random() < EXTRAS.strength.onPlan) {
     overlap = Math.random();
     stronger = Math.random();
-  }  
+  }
+  // Equal weight on each center×flush band cell, then linear inside the band.
+  const cSpan = (CENTERED_MAX - CENTERED_MIN) / LAYOUT_BANDS;
+  const fSpan = (FLUSH_MAX - FLUSH_MIN) / LAYOUT_BANDS;
+  const centered = CENTERED_MIN + ((Math.random() * LAYOUT_BANDS) | 0) * cSpan + Math.random() * cSpan;
+  const flush = FLUSH_MIN + ((Math.random() * LAYOUT_BANDS) | 0) * fSpan + Math.random() * fSpan;
   return [{
     plan: Plan.copy({
       wave: w,
@@ -147,8 +154,8 @@ Planner.offer = function (tier, wave) {
       cols: cols,
       stamps: stamps,
       open: "any",
-      centered: CENTERED_MIN + Math.random() * (CENTERED_MAX - CENTERED_MIN),
-      flush: FLUSH_MIN + Math.random() * (FLUSH_MAX - FLUSH_MIN),
+      centered: centered,
+      flush: flush,
       trim: TRIM_MIN + Math.random() * (TRIM_MAX - TRIM_MIN),
       area: a,
       fuelChance: fuelChance,
