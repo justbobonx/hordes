@@ -60,6 +60,7 @@ function Game() {
   this.totalTime = 0;
   this.bestScore = 0;
   this.lastScore = 0;
+  this.lastPerfect = false;
   this.scoreSum = 0;
   this.perfects = 0;
   this.retries = 0;
@@ -294,6 +295,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.totalTime = 0;
     this.bestScore = 0;
     this.lastScore = 0;
+    this.lastPerfect = false;
     this.scoreSum = 0;
     this.perfects = 0;
     this.retries = 0;
@@ -313,6 +315,7 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.totalTime = run.totalTime | 0;
     this.bestScore = run.bestScore | 0;
     this.lastScore = run.lastScore | 0;
+    this.lastPerfect = !!run.lastPerfect;
     this.scoreSum = run.scoreSum | 0;
     this.perfects = run.perfects | 0;
     this.retries = run.retries | 0;
@@ -406,6 +409,7 @@ Game.prototype.startOver = function () {
   this.totalTime = 0;
   this.bestScore = 0;
   this.lastScore = 0;
+  this.lastPerfect = false;
   this.scoreSum = 0;
   this.perfects = 0;
   this.retries = 0;
@@ -500,6 +504,8 @@ Game.prototype.refreshHub = function () {
     perfects: String(this.perfects | 0),
     retries: String(this.retries | 0),
     totalTime: this.formatTime(this.totalTime | 0),
+    wavePerfect: !!this.lastPerfect,
+    avgMuted: tries <= 0,
   });
 };
 
@@ -1295,7 +1301,7 @@ Game.prototype.statusView = function () {
     }
   }
   let resetLabel = "RESET";
-  if (this.ended === "win") resetLabel = this.gameMode === "endless" ? "NEXT" : "DONE";
+  if (this.ended === "win") resetLabel = "DONE";
   else if (this.ended === "lose" || piecesGone) resetLabel = "TRY AGAIN";
   return {
     text: text,
@@ -1355,6 +1361,7 @@ Game.prototype.persistRun = function () {
     totalTime: this.totalTime | 0,
     bestScore: this.bestScore | 0,
     lastScore: this.lastScore | 0,
+    lastPerfect: !!this.lastPerfect,
     scoreSum: this.scoreSum | 0,
     perfects: this.perfects | 0,
     retries: this.retries | 0,
@@ -1501,6 +1508,7 @@ Game.prototype.onLevelExit = function (reason) {
         ? 100
         : Math.round(Math.max(0, Math.min(100, this.endlessScoreRaw())));
       this.lastScore = score;
+      this.lastPerfect = !!this.perfect;
       this.bestScore = Math.max(this.bestScore | 0, score);
       this.scoreSum = (this.scoreSum | 0) + score;
       if (this.perfect) this.perfects = (this.perfects | 0) + 1;

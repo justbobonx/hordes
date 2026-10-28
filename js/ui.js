@@ -25,7 +25,7 @@ const TOAST_COLOR_ORANGE = "#e07a2f";
 const HUD_BOT_MIN = 56;
 
 // Plan row vertical place: hub sits in the lower band under stats; hex uses a gap.
-const PLAN_HUB_CENTER_Y_FRAC = 0.62;
+const PLAN_HUB_CENTER_Y_FRAC = 0.55;
 const PLAN_HEX_GAP = 16;
 const PLAN_SAFE_TOP = 12;
 const PLAN_SAFE_BOT = 12;
@@ -163,6 +163,10 @@ Ui.prototype.paintHub = function (view) {
   set("hub-perfects", view.perfects);
   set("hub-retries", view.retries);
   set("hub-total-time", view.totalTime);
+  const waveLine = document.getElementById("hub-wave-line");
+  if (waveLine) waveLine.classList.toggle("hub-wave-perfect", !!view.wavePerfect);
+  const avgLine = document.getElementById("hub-avg-line");
+  if (avgLine) avgLine.classList.toggle("hub-muted", !!view.avgMuted);
 };
 
 Ui.prototype.showStory = function () {

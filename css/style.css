@@ -411,9 +411,21 @@ h1 {
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background: #0c100a;
+  background: #2a5230;
 }
 #endless-hub[hidden] { display: none !important; }
+/* Soft vignette + faint grain so the hub is not a flat CSS slab. */
+#endless-hub::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0.45) 100%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.15 0 0 0 0 0.28 0 0 0 0 0.14 0 0 0 0.18 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: auto, 180px 180px;
+  opacity: 1;
+}
 /* Big toast-like run stats; wave alone on top, then two columns. */
 #hub-stats {
   position: absolute;
@@ -430,9 +442,14 @@ h1 {
   letter-spacing: 1px;
   color: #c9d2b8;
   text-align: center;
+  z-index: 1;
 }
 #hub-wave-line {
   font-size: 1.15em;
+}
+#hub-wave-line.hub-wave-perfect,
+#hub-wave-line.hub-wave-perfect span {
+  color: #f2e27a;
 }
 #hub-grid {
   display: grid;
@@ -442,8 +459,24 @@ h1 {
   justify-content: center;
   text-align: left;
 }
+.hub-line {
+  /* Soft dark outline like the canvas toast lettering. */
+  text-shadow:
+    -2px 0 0 rgba(0, 0, 0, 0.2),
+     2px 0 0 rgba(0, 0, 0, 0.2),
+     0 -2px 0 rgba(0, 0, 0, 0.2),
+     0 2px 0 rgba(0, 0, 0, 0.2),
+    -1px -1px 0 rgba(0, 0, 0, 0.2),
+     1px -1px 0 rgba(0, 0, 0, 0.2),
+    -1px 1px 0 rgba(0, 0, 0, 0.2),
+     1px 1px 0 rgba(0, 0, 0, 0.2);
+}
 .hub-line span {
   color: #ffffff;
+}
+.hub-line.hub-muted,
+.hub-line.hub-muted span {
+  color: #6d7d62;
 }
 #hub-hud-bottom {
   bottom: 0;
