@@ -24,6 +24,12 @@ const TOAST_COLOR_ORANGE = "#e07a2f";
 // Mobile bar height is auto; desktop stays ~72. Live layout reads the real height.
 const HUD_BOT_MIN = 56;
 
+// Plan row vertical place: hub sits in the lower band under stats; hex uses a gap.
+const PLAN_HUB_CENTER_Y_FRAC = 0.62;
+const PLAN_HEX_GAP = 16;
+const PLAN_SAFE_TOP = 12;
+const PLAN_SAFE_BOT = 12;
+
 function Ui() {
   this.canvas = document.getElementById("board");
   this.ctx = this.canvas.getContext("2d");
@@ -62,6 +68,9 @@ function Ui() {
   this.elPlanRow = document.getElementById("plan-row");
   this.elStory = document.getElementById("story-screen");
   this.elStorySlot = document.getElementById("story-slot");
+  this.elHub = document.getElementById("endless-hub");
+  this.btnHubBack = document.getElementById("btn-hub-back");
+  this.planAnchor = null;
   this.onPlanPick = null;
   this.onPlanBack = null;
   this.onStoryContinue = null;
@@ -91,18 +100,69 @@ Ui.prototype.showStart = function () {
   if (this.elStart) this.elStart.hidden = false;
 };
 
-// overMap: campaign card floats over the live map instead of its own backdrop.
-Ui.prototype.showPlan = function (overMap) {
+// anchor: { kind: "hub" } or { kind: "hex", clientY }. No dim; place row once on open.
+Ui.prototype.showPlan = function (anchor) {
   if (!this.elPlan) return;
-  this.elPlan.classList.toggle("over-map", !!overMap);
+  this.planAnchor = anchor || { kind: "hub" };
+  const overMap = this.planAnchor.kind === "hex";
+  this.elPlan.classList.toggle("plan-over-map", overMap);
+  this.elPlan.classList.remove("over-map");
   this.planShownAt = performance.now();
   this.elPlan.hidden = false;
+  this.placePlanRow(this.planAnchor);
+};
+
+Ui.prototype.placePlanRow = function (anchor) {
+  const row = this.elPlanRow;
+  if (!row) return;
+  const h = row.offsetHeight || 0;
+  const vh = window.innerHeight;
+  const safeTop = PLAN_SAFE_TOP;
+  const safeBot = PLAN_SAFE_BOT;
+  let top;
+  if (!anchor || anchor.kind !== "hex") {
+    const cy = vh * PLAN_HUB_CENTER_Y_FRAC;
+    top = cy - h / 2;
+  } else {
+    const clientY = +anchor.clientY || vh / 2;
+    const gap = PLAN_HEX_GAP;
+    if (clientY + gap + h <= vh - safeBot) top = clientY + gap;
+    else if (clientY - gap - h >= safeTop) top = clientY - gap - h;
+    else top = Math.max(safeTop, Math.min(vh - safeBot - h, clientY - h / 2));
+  }
+  top = Math.max(safeTop, Math.min(Math.max(safeTop, vh - safeBot - h), top));
+  row.style.top = Math.round(top) + "px";
 };
 
 Ui.prototype.hidePlan = function () {
   if (!this.elPlan || this.elPlan.hidden) return false;
   this.elPlan.hidden = true;
+  this.elPlan.classList.remove("plan-over-map");
+  this.elPlan.classList.remove("over-map");
+  this.planAnchor = null;
+  if (this.elPlanRow) this.elPlanRow.style.top = "";
   return true;
+};
+
+Ui.prototype.showHub = function () {
+  if (this.elHub) this.elHub.hidden = false;
+};
+
+Ui.prototype.hideHub = function () {
+  if (this.elHub) this.elHub.hidden = true;
+};
+
+Ui.prototype.paintHub = function (view) {
+  if (!view) return;
+  function set(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+  set("hub-wave", view.wave);
+  set("hub-avg", view.avg);
+  set("hub-perfects", view.perfects);
+  set("hub-retries", view.retries);
+  set("hub-total-time", view.totalTime);
 };
 
 Ui.prototype.showStory = function () {
@@ -278,6 +338,7 @@ Ui.prototype.bind = function (handlers) {
   this.onStoryContinue = handlers.storyContinue || null;
   on(this.btnHelp, "click", handlers.help);
   on(this.btnBack, "click", handlers.back);
+  on(this.btnHubBack, "click", handlers.hubBack || handlers.planBack);
   on(this.btnUndo, "click", handlers.undo);
   on(this.btnHint, "click", handlers.hint);
   on(this.btnReset, "click", handlers.reset);
@@ -290,9 +351,9 @@ Ui.prototype.bind = function (handlers) {
       e.stopPropagation();
       e.preventDefault();
     }, true);
-    // Card clicks stop propagation, so this only sees the backdrop. Over the map it means Back.
+    // Card clicks stop propagation, so this only sees the backdrop. Hex/map only: dismiss.
     this.elPlan.addEventListener("click", function () {
-      if (self.elPlan.classList.contains("over-map") && self.onPlanBack) self.onPlanBack();
+      if (self.elPlan.classList.contains("plan-over-map") && self.onPlanBack) self.onPlanBack();
     });
   }
   document.addEventListener("click", function (e) {

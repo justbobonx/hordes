@@ -101,3 +101,12 @@ MapView.prototype.hit = function (e) {
   const rect = this.canvas.getBoundingClientRect();
   return MapDraw.hit(this.layoutInfo, e.clientX - rect.left, e.clientY - rect.top);
 };
+
+// Hex center Y in client (viewport) pixels for plan placement over the map.
+MapView.prototype.hexClientY = function (key) {
+  if (!this.canvas || !this.layoutInfo || !this.layoutInfo.positions) return window.innerHeight / 2;
+  const pos = this.layoutInfo.positions[key];
+  if (!pos) return window.innerHeight / 2;
+  const rect = this.canvas.getBoundingClientRect();
+  return rect.top + pos.y;
+};

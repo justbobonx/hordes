@@ -58,6 +58,11 @@ function Game() {
   this.sdtNow = 0;
   this.tries = 0;
   this.totalTime = 0;
+  this.bestScore = 0;
+  this.lastScore = 0;
+  this.scoreSum = 0;
+  this.perfects = 0;
+  this.retries = 0;
   this.storyQueue = [];
   this.storyAfter = null;
   this.hold = null;
@@ -145,6 +150,9 @@ Game.prototype.bind = function () {
     },
     planBack: function () {
       self.onPlanBack();
+    },
+    hubBack: function () {
+      self.onHubBack();
     },
     storyContinue: function () {
       self.advanceStory();
@@ -284,6 +292,11 @@ Game.prototype.enterMode = function (mode, isNew) {
   this.sdtNow = 0;
     this.tries = 0;
     this.totalTime = 0;
+    this.bestScore = 0;
+    this.lastScore = 0;
+    this.scoreSum = 0;
+    this.perfects = 0;
+    this.retries = 0;
     this.activeHexKey = null;
     this.lastHexKey = null;
     this.country = null;
@@ -298,6 +311,11 @@ Game.prototype.enterMode = function (mode, isNew) {
     this.perfect = !!run.perfect;
     this.tries = run.tries | 0;
     this.totalTime = run.totalTime | 0;
+    this.bestScore = run.bestScore | 0;
+    this.lastScore = run.lastScore | 0;
+    this.scoreSum = run.scoreSum | 0;
+    this.perfects = run.perfects | 0;
+    this.retries = run.retries | 0;
     this.activeHexKey = run.activeHexKey || null;
     this.lastHexKey = run.lastHexKey || null;
     if (mode === "campaign") this.country = Save.readCountry();
@@ -325,7 +343,7 @@ Game.prototype.enterMode = function (mode, isNew) {
       this.setMode("level");
       this.restore(board);
     } else {
-      this.openPlan();
+      this.openHub();
     }
   }
 };
@@ -386,6 +404,11 @@ Game.prototype.startOver = function () {
   this.sdtNow = 0;
   this.tries = 0;
   this.totalTime = 0;
+  this.bestScore = 0;
+  this.lastScore = 0;
+  this.scoreSum = 0;
+  this.perfects = 0;
+  this.retries = 0;
   this.clockOn = 0;
   this.storyQueue = [];
   this.storyAfter = null;
@@ -450,9 +473,39 @@ Game.prototype.openPlan = function () {
   this.ui.paintPlans(cards);
   this.ui.hideStart();
   this.ui.hideStory();
-  this.setMode("plan");
-  this.ui.showPlan();
+  // Keep underlay mode (hub / map / start); plan is an overlay only.
+  let anchor = { kind: "hub" };
+  if (this.mode === "map" && this.activeHexKey && this.mapView) {
+    anchor = { kind: "hex", clientY: this.mapView.hexClientY(this.activeHexKey) };
+  }
+  this.ui.showPlan(anchor);
   this.updateHud();
+};
+
+Game.prototype.openHub = function () {
+  this.ui.hideStart();
+  this.ui.hideStory();
+  this.ui.clearToast();
+  this.setMode("hub");
+  this.refreshHub();
+  this.openPlan();
+};
+
+Game.prototype.refreshHub = function () {
+  const tries = this.tries | 0;
+  const dash = "\u2014";
+  this.ui.paintHub({
+    wave: String(this.wave | 0),
+    avg: tries > 0 ? String(Math.round((this.scoreSum | 0) / tries)) : dash,
+    perfects: String(this.perfects | 0),
+    retries: String(this.retries | 0),
+    totalTime: this.formatTime(this.totalTime | 0),
+  });
+};
+
+Game.prototype.onHubBack = function () {
+  this.persist();
+  this.returnToStart();
 };
 
 Game.prototype.openStory = function (id, after) {
@@ -1275,9 +1328,13 @@ Game.prototype.pauseClock = function () {
 
 Game.prototype.formatTime = function (ms) {
   const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const r = s % 60;
-  return m + ":" + (r < 10 ? "0" : "") + r;
+  const mm = (m < 10 && h > 0 ? "0" : "") + m;
+  const ss = (r < 10 ? "0" : "") + r;
+  if (h > 0) return h + ":" + mm + ":" + ss;
+  return m + ":" + ss;
 };
 
 Game.prototype.persistRun = function () {
@@ -1296,6 +1353,11 @@ Game.prototype.persistRun = function () {
     lastHexKey: this.lastHexKey || null,
     tries: this.tries | 0,
     totalTime: this.totalTime | 0,
+    bestScore: this.bestScore | 0,
+    lastScore: this.lastScore | 0,
+    scoreSum: this.scoreSum | 0,
+    perfects: this.perfects | 0,
+    retries: this.retries | 0,
   });
 };
 
@@ -1334,6 +1396,7 @@ Game.prototype.setMode = function (mode) {
   const levelHud = document.getElementById("hud-bottom");
   const isMap = mode === "map";
   const isLevel = mode === "level";
+  const isHub = mode === "hub";
   // Sticky end-of-level toast must not freeze across overmap / next level.
   if (wasLevel && !isLevel) this.ui.clearToast();
   if (board) board.classList.toggle("inactive", !isLevel);
@@ -1341,6 +1404,8 @@ Game.prototype.setMode = function (mode) {
   if (mapTop) mapTop.hidden = !isMap;
   if (mapBot) mapBot.hidden = !isMap;
   if (levelHud) levelHud.style.display = isLevel ? "" : "none";
+  if (isHub) this.ui.showHub();
+  else this.ui.hideHub();
   if (isMap) {
     this.bindMap();
     this.mapView.layout(this.country);
@@ -1404,7 +1469,7 @@ Game.prototype.onMapUp = function (e) {
   this.activeHexKey = key;
   this.ui.hideStart();
   this.ui.paintPlans([{ plan: hex.plan, locked: false }]);
-  this.ui.showPlan(true);
+  this.ui.showPlan({ kind: "hex", clientY: this.mapView.hexClientY(key) });
 };
 
 Game.prototype.enterHexLevel = function (key) {
@@ -1431,16 +1496,27 @@ Game.prototype.onLevelExit = function (reason) {
   }
   if (this.gameMode === "endless") {
     if (reason === "win") {
-      this.wave++;
+      // Bank before wave++: perfect counts as 100 for sum/best.
+      const score = this.perfect
+        ? 100
+        : Math.round(Math.max(0, Math.min(100, this.endlessScoreRaw())));
+      this.lastScore = score;
+      this.bestScore = Math.max(this.bestScore | 0, score);
+      this.scoreSum = (this.scoreSum | 0) + score;
+      if (this.perfect) this.perfects = (this.perfects | 0) + 1;
+      this.retries = (this.retries | 0) + (this.resets | 0);
       this.tries = (this.tries | 0) + 1;
       this.totalTime = (this.totalTime | 0) + this.elapsedMs;
-      this.persistRun();
-      this.openPlan();
-    } else {
-      this.persistRun();
-      Save.clearBoard("endless");
-      this.returnToStart();
+      this.wave++;
     }
+    this.persistRun();
+    // Drop the level board so a refresh lands on hub, not a stale restore.
+    Save.clearBoard("endless");
+    this.grid = null;
+    this.plan = null;
+    this.ended = null;
+    this.ui.clearToast();
+    this.openHub();
     return;
   }
   // campaign: Overmap queues the clear and the days; the map view plays them.

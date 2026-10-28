@@ -119,7 +119,27 @@ button:disabled {
 
 .overlay[hidden] { display: none; }
 
-.plan-overlay.over-map { background: rgba(12, 16, 10, 0.35); }
+/* Plan floats over map or hub with no dim fill; vertical place is set in JS. */
+.plan-overlay {
+  background: transparent;
+  justify-content: flex-start;
+  padding: 0;
+  pointer-events: none;
+}
+.plan-overlay.plan-over-map {
+  pointer-events: auto;
+  background: transparent;
+}
+#plan-row {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  pointer-events: auto;
+  margin: 0;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
 
 .start-panel, .panel, .story-card, .plan-card {
   cursor: pointer;
@@ -385,3 +405,50 @@ h1 {
 }
 
 .map-hud[hidden] { display: none !important; }
+
+#endless-hub {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: #0c100a;
+}
+#endless-hub[hidden] { display: none !important; }
+/* Big toast-like run stats; wave alone on top, then two columns. */
+#hub-stats {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(6% + env(safe-area-inset-top));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35em;
+  pointer-events: none;
+  font-size: clamp(26px, 6.5vw, 56px);
+  line-height: 1.2;
+  letter-spacing: 1px;
+  color: #c9d2b8;
+  text-align: center;
+}
+#hub-wave-line {
+  font-size: 1.15em;
+}
+#hub-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 1.2em;
+  row-gap: 0.12em;
+  justify-content: center;
+  text-align: left;
+}
+.hub-line span {
+  color: #ffffff;
+}
+#hub-hud-bottom {
+  bottom: 0;
+  border-top-width: 2px;
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  justify-content: space-between;
+  pointer-events: auto;
+}
